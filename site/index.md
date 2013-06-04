@@ -515,7 +515,7 @@ To allow this benchmark to be easily reproduced, we've prepared various sizes of
   * For Impala and Hive, use the [Cloudera Manager EC2 deployment instructions](http://blog.cloudera.com/blog/2013/03/how-to-create-a-cdh-cluster-on-amazon-ec2-via-cloudera-manager/). Make sure to upload your own RSA key so that you can use the same key to log into the nodes and run queries.
   * For Shark, use the [Spark/Shark EC2 launch scripts](http://spark-project.org/docs/latest/ec2-scripts.html). You can checkout Spark with the following command: `git clone https://github.com/pwendell/spark -b benchmark` launch with AMI `ami-09473260`.
 
-2. Use the provided `prepare-benchmark.sh` to load an appropriately sized dataset into the cluster. <br><br> `./prepare-benchmark.sh --help`
+2. Scripts for preparing data are included in the [benchmark github repo](https://github.com/amplab/benchmark.git). Use the provided `prepare-benchmark.sh` to load an appropriately sized dataset into the cluster. <br><br> `./prepare-benchmark.sh --help`
 
 Here are a few examples showing the options used in this benchmark...
 
