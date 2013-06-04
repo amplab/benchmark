@@ -1,0 +1,60 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN"
+"http://www.w3.org/TR/html4/strict.dtd">
+<html>
+  <head>
+    <title>{{ page.title }}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="media/benchmark.css" rel="stylesheet" media="screen">
+    <link href="media/pygments-default.css" rel="stylesheet" media="screen">
+    <!-- Bootstrap -->
+    <link href="media/bootstrap/css/bootstrap.min.css" rel="stylesheet" media="screen">
+    <script src="media/jquery/jquery-1.9.1.js"></script>
+    <script src="media/protovis/protovis.min.js"></script>
+    <script src="media/benchmark.js"></script>
+    <script src="media/bootstrap/js/bootstrap.js"></script>
+    <script src="media/bootstrap/js/bootstrap-scrollspy.js"></script>
+  </head>
+  <body style="padding-top:50px; padding-left:20px;">
+  <script>
+  <!-- Google Analytics -->
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+  ga('create', 'UA-41465413-1', 'berkeley.edu');
+  ga('send', 'pageview');
+
+  </script>
+    <div class="navbar navbar-static navbar-fixed-top" data-scrollspy="scrollspy" id="mainNavBar">
+      <div class="navbar-inner">
+        <div class="container">
+          <button type="button" class="btn btn-navbar" data-toggle="collapse" data-target=".nav-collapse">
+            <span class="icon-bar"></span>
+            <span class="icon-bar"></span>
+            <span class="icon-bar"></span>
+          </button>
+          <a class="brand" href="#">Big Data Benchmark</a>
+          <div class="nav-collapse collapse">
+            <ul class="nav">
+              <li class="active"><a href="#introduction">Introduction</a></li>
+              <li><a href="#workload">Workload</a></li>
+              <li><a href="#results">Results</a></li>
+              <li><a href="#discussion">Discussion</a></li>
+              <li><a href="#faq">FAQ</a></li>
+              <li><a href="#running">Run Yourself</a></li>
+            </ul>
+          </div><!--/.nav-collapse -->
+        </div>
+      </div>
+    </div>
+
+    <div data-spy=scroll data-target="mainNavBar" data-offset="0" class="container">
+      <div class="row">
+        <div class="span12">
+          {{content}}
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
