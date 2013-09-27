@@ -108,9 +108,12 @@ def parse_args():
 
 # Run a command on a host through ssh, throwing an exception if ssh fails
 def ssh(host, username, identity_file, command):
-  subprocess.check_call(
-      "ssh -t -o StrictHostKeyChecking=no -i %s %s@%s '%s'" %
-      (identity_file, username, host, command), shell=True)
+  command = "source /root/.bash_profile; %s" % command
+  cmd = "ssh -t -o StrictHostKeyChecking=no -i %s %s@%s '%s'" % (identity_file,
+                                                                 username,
+                                                                 host, command)
+  print cmd
+  subprocess.check_call(cmd, shell=True)
 
 # Copy a file to a given host through scp, throwing an exception if scp fails
 def scp_to(host, identity_file, username, local_file, remote_file):
@@ -155,7 +158,7 @@ def prepare_shark_dataset(opts):
   if not opts.skip_s3_import:  
     print "=== IMPORTING BENCHMARK DATA FROM S3 ==="
     try:
-      ssh_impala("hdfs dfs -mkdir /user/shark/benchmark")
+      ssh_shark("/root/ephemeral-hdfs/bin/hdfs dfs -mkdir /user/shark/benchmark")
     except Exception:
       pass # Folder may already exist
 
@@ -192,26 +195,26 @@ def prepare_shark_dataset(opts):
   ssh_shark("/root/spark-ec2/copy-dir /root/url_count.py")
   
   ssh_shark(
-    "/root/shark-0.2/bin/shark -e \"DROP TABLE IF EXISTS rankings; " \
+    "/root/shark/bin/shark -e \"DROP TABLE IF EXISTS rankings; " \
     "CREATE EXTERNAL TABLE rankings (pageURL STRING, pageRank INT, " \
     "avgDuration INT) ROW FORMAT DELIMITED FIELDS TERMINATED BY \\\",\\\" " \
     "STORED AS TEXTFILE LOCATION \\\"/user/shark/benchmark/rankings\\\";\"")
 
   ssh_shark(
-    "/root/shark-0.2/bin/shark -e \"DROP TABLE IF EXISTS scratch; " \
+    "/root/shark/bin/shark -e \"DROP TABLE IF EXISTS scratch; " \
     "CREATE EXTERNAL TABLE scratch (pageURL STRING, pageRank INT, " \
     "avgDuration INT) ROW FORMAT DELIMITED FIELDS TERMINATED BY \\\",\\\" " \
     "STORED AS TEXTFILE LOCATION \\\"/user/shark/benchmark/scratch\\\";\"")
 
   ssh_shark(
-    "/root/shark-0.2/bin/shark -e \"DROP TABLE IF EXISTS uservisits; " \
+    "/root/shark/bin/shark -e \"DROP TABLE IF EXISTS uservisits; " \
     "CREATE EXTERNAL TABLE uservisits (sourceIP STRING,destURL STRING," \
     "visitDate STRING,adRevenue DOUBLE,userAgent STRING,countryCode STRING," \
     "languageCode STRING,searchWord STRING,duration INT ) " \
     "ROW FORMAT DELIMITED FIELDS TERMINATED BY \\\",\\\" " \
     "STORED AS TEXTFILE LOCATION \\\"/user/shark/benchmark/uservisits\\\";\"")
   
-  ssh_shark("/root/shark-0.2/bin/shark -e \"DROP TABLE IF EXISTS documents; " \
+  ssh_shark("/root/shark/bin/shark -e \"DROP TABLE IF EXISTS documents; " \
     "CREATE EXTERNAL TABLE documents (line STRING) STORED AS TEXTFILE " \
     "LOCATION \\\"/user/shark/benchmark/crawl\\\";\"")
 

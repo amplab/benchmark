@@ -10,7 +10,9 @@ import sys
 from sys import stderr
 from optparse import OptionParser
 import os
+import datetime
 import time
+from StringIO import StringIO
 from pg8000 import DBAPI
 
 # A scratch directory on your filesystem
@@ -141,8 +143,6 @@ def parse_args():
 
   parser.add_option("-g", "--shark-no-cache", action="store_true", 
       default=False, help="Disable caching in Shark")
-  parser.add_option("-v", "--shark-use-hive", action="store_true",
-      default=False, help="Causes Shark to use Hive's execution mode") 
   parser.add_option("--impala-use-hive", action="store_true",
       default=False, help="Use Hive for query executio on Impala nodes") 
   parser.add_option("-t", "--reduce-tasks", type="int", default=150, 
@@ -175,10 +175,6 @@ def parse_args():
       help="Which query to run in benchmark")
 
   (opts, args) = parser.parse_args()
-
-  # Don't bother trying to cache if we are using Hive
-  if opts.shark_use_hive:
-    opts.shark_no_cache = True
 
   if not (opts.impala or opts.shark or opts.redshift):
     parser.print_help()
@@ -216,9 +212,13 @@ def parse_args():
 
 # Run a command on a host through ssh, throwing an exception if ssh fails
 def ssh(host, username, identity_file, command):
-  subprocess.check_call(
-      "ssh -t -o StrictHostKeyChecking=no -i %s %s@%s '%s'" %
-      (identity_file, username, host, command), shell=True)
+  print command
+  command = "source /root/.bash_profile; %s" % command
+  cmd = "ssh -t -o StrictHostKeyChecking=no -i %s %s@%s '%s'" % (identity_file,
+                                                                 username,
+                                                                 host, command)
+  #subprocess.check_call(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+  return subprocess.check_call(cmd, shell=True)
 
 # Copy a file to a given host through scp, throwing an exception if scp fails
 def scp_to(host, identity_file, username, local_file, remote_file):
@@ -233,6 +233,7 @@ def scp_from(host, identity_file, username, remote_file, local_file):
       (identity_file, username, host, remote_file, local_file), shell=True)
 
 def run_shark_benchmark(opts):
+  global CLEAN_QUERY, QUERY_MAP
   def ssh_shark(command):
     ssh(opts.shark_host, "root", opts.shark_identity_file, command)
 
@@ -245,117 +246,123 @@ def run_shark_benchmark(opts):
 
   prefix = str(time.time()).split(".")[0]
   query_file_name = "%s_workload.sh" % prefix
+  slaves_file_name = "%s_slaves" % prefix
   local_query_file = os.path.join(LOCAL_TMP_DIR, query_file_name)
+  local_slaves_file = os.path.join(LOCAL_TMP_DIR, slaves_file_name)
   query_file = open(local_query_file, 'w')
-  remote_result_file = "/mnt/%s_results" % prefix
-  remote_tmp_file = "/mnt/%s_out" % prefix
   remote_query_file = "/mnt/%s" % query_file_name
+  remote_tmp_file = "/mnt/%s_out" % prefix
+  remote_result_file = "/mnt/%s_results" % prefix
 
-  runner = "/root/shark-0.2/bin/shark-withinfo"
+  runner = "/root/shark/bin/shark-withinfo"
   
-  # Two modes here: If using Shark disk or Hive, clear buffer cache in-between
-  # each query. If using Shark in memory, send one large query manifest. This saves
-  # the time of re-building the cached table each time. 
-  if opts.shark_use_hive or opts.shark_no_cache:
-    query_list = "set mapred.reduce.tasks = %s;" % opts.reduce_tasks
-    if opts.shark_use_hive:
-      query_list = query_list + "set shark.exec.mode='hive';" 
+  # Two modes here: Shark Mem and Shark Disk. If using Shark disk clear buffer
+  # cache in-between each query. If using Shark Mem, used cached tables.
 
-   # Throw away query for JVM warmup
-    query_list = query_list + "SELECT COUNT(*) FROM scratch;"
-    if '4' not in opts.query_num:
-      query_list = query_list + CLEAN_QUERY 
-    query_list = query_list + QUERY_MAP[opts.query_num][0]
+  query_list = "set mapred.reduce.tasks = %s;" % opts.reduce_tasks
 
-    query_file.write(
-      "%s -e '%s' > %s 2>&1\n" % (runner, query_list, remote_tmp_file))
+  # Throw away query for JVM warmup
+  query_list += "SELECT COUNT(*) FROM scratch;"
 
-    query_file.write(
-        "cat %s | grep Time | grep -v INFO |grep -v MapReduce >> %s" % (
-          remote_tmp_file, remote_result_file))
-    query_file.close()
+  # Create cached queries for Shark Mem
+  if not opts.shark_no_cache:
+    CLEAN_QUERY = make_output_cached(CLEAN_QUERY)
 
-    print "Copying files to Shark"
-    scp_to(opts.shark_host, opts.shark_identity_file, "root", local_query_file, 
-        remote_query_file)
-    ssh_shark("chmod 775 %s" % remote_query_file)
-    
-    # Run benchmark
-    print "Running remote benchmark..."
-    for i in range(opts.num_trials):
-      if opts.clear_buffer_cache:
-        ssh_shark("python /root/shark-0.2/bin/dev/clear-buffer-cache.py")
-      ssh_shark("%s" % remote_query_file)
-  else:
-    query_list = "DROP TABLE IF EXISTS uservisits_cached;" \
-                 "DROP TABLE IF EXISTS rankings_cached;" \
-                 "CREATE TABLE uservisits_cached AS SELECT * FROM uservisits;" \
-                 "CREATE TABLE rankings_cached AS SELECT * FROM rankings;" \
-                 "set mapred.reduce.tasks = %s;" % opts.reduce_tasks
+    def convert_to_cached(query):
+      return (make_output_cached(make_input_cached(query[0])), )
 
+    QUERY_MAP = {k: convert_to_cached(v) for k, v in QUERY_MAP.items()}
+
+    # Set up cached tables
     if '4' in opts.query_num:
       # Query 4 uses entirely different tables
-      query_list = "DROP TABLE IF EXISTS documents_cached;" \
-                   "CREATE TABLE documents_cached AS SELECT * FROM documents;" \
-                   "set mapred.reduce.tasks = %s;" % opts.reduce_tasks
+      query_list += """
+                    DROP TABLE IF EXISTS documents_cached;
+                    CREATE TABLE documents_cached AS SELECT * FROM documents;
+                    """
+    else:
+      query_list += """
+                    DROP TABLE IF EXISTS uservisits_cached;
+                    DROP TABLE IF EXISTS rankings_cached;
+                    CREATE TABLE uservisits_cached AS SELECT * FROM uservisits;
+                    CREATE TABLE rankings_cached AS SELECT * FROM rankings;
+                    """
 
-    for i in range(opts.num_trials):
-      if '4' not in opts.query_num:
-        query_list = query_list + make_output_cached(CLEAN_QUERY)
-      query_list = query_list + make_output_cached(
-          make_input_cached(QUERY_MAP[opts.query_num][0]))
+  if '4' not in opts.query_num:
+    query_list += CLEAN_QUERY
+  query_list += QUERY_MAP[opts.query_num][0]
 
-    query_file.write(
-        "%s -e '%s' > %s 2>&1\n" % (runner, query_list, remote_tmp_file))
-    query_file.write(
-      "cat %s | grep Time |grep -v INFO | grep -v MapReduce > %s" % (
+  import re
+  query_list = re.sub("\s\s+", " ", query_list.replace('\n', ' '))
+
+  print "\nQuery:"
+  print query_list.replace(';', ";\n")
+
+  if opts.clear_buffer_cache:
+    query_file.write("python /root/shark/bin/dev/clear-buffer-cache.py\n")
+
+  query_file.write(
+    "%s -e '%s' > %s 2>&1\n" % (runner, query_list, remote_tmp_file))
+
+  query_file.write(
+      "cat %s | grep Time | grep -v INFO |grep -v MapReduce >> %s\n" % (
         remote_tmp_file, remote_result_file))
-    query_file.close()
 
-    print "Copying files to Shark"
-    scp_to(opts.shark_host, opts.shark_identity_file, "root", local_query_file, 
-        remote_query_file)
-    ssh_shark("chmod 775 %s" % remote_query_file)
+  query_file.close()
 
-    # Run benchmark
-    print "Running remote benchmark..."
-    ssh_shark("%s" % remote_query_file)
+  print "Copying files to Shark"
+  scp_to(opts.shark_host, opts.shark_identity_file, "root", local_query_file,
+      remote_query_file)
+  ssh_shark("chmod 775 %s" % remote_query_file)
+
+  print "Getting Slave List"
+  scp_from(opts.shark_host, opts.shark_identity_file, "root",
+           "/root/spark-ec2/slaves", local_slaves_file)
+  slaves = map(str.strip, open(local_slaves_file).readlines())
+
+  # Run benchmark
+  print "Running remote benchmark..."
 
   # Collect results
-  local_results_file = os.path.join(LOCAL_TMP_DIR, "%s_results" % prefix)
-  scp_from(opts.shark_host, opts.shark_identity_file, "root", 
-      "/mnt/%s_results" % prefix, local_results_file) 
-  contents = open(local_results_file).readlines()
-  results = map(lambda x: float(x.split(": ")[1].split(" ")[0]), contents)
+  results = []
+  contents = []
 
-  def every_n_entries(lst, n, offset): # assumes offset < n
-    return [k[1] for k in enumerate(lst) if k[0] % n == offset]
+  for i in range(opts.num_trials):
+    print "Stopping Executors on Slaves....."
+    ensure_spark_stopped_on_slaves(slaves)
+    print "Query %s : Trial %i" % (opts.query_num, i+1)
+    ssh_shark("%s" % remote_query_file)
+    local_results_file = os.path.join(LOCAL_TMP_DIR, "%s_results" % prefix)
+    scp_from(opts.shark_host, opts.shark_identity_file, "root",
+        "/mnt/%s_results" % prefix, local_results_file)
+    content = open(local_results_file).readlines()
+    all_times = map(lambda x: float(x.split(": ")[1].split(" ")[0]), content)
 
-  print opts.query_num
-  if '4' in opts.query_num:
-    if not opts.shark_no_cache and not opts.shark_use_hive:  
-      results = results[2:] # Remove results from cached table creation
-      results_a = every_n_entries(results, 4, 1)
-      results_b = every_n_entries(results, 4, 3)
+    if '4' in opts.query_num:
+      query_times = all_times[-4:]
+      part_a = query_times[1]
+      part_b = query_times[3]
+      print "Parts: %s, %s" % (part_a, part_b)
+      result = float(part_a) + float(part_b)
     else:
-      results_a = every_n_entries(results, 5, 2)
-      results_b = every_n_entries(results, 5, 4)
-    print "Parts: %s, %s" % (results_a, results_b)
-    zipped = zip(results_a, results_b)
-    results = map(lambda k: float(k[0]) + float(k[1]), zipped)
-  else:
-    if not opts.shark_no_cache and not opts.shark_use_hive:
-      results = results[4:] # Remove results from table creation
-      results = every_n_entries(results, 2, 1) # Remove cleanup query
-    else:
-      results = every_n_entries(results, 3, 2) # Remove cleanup and warmup
+      result = all_times[-1] # Only want time of last query
 
-  # Clean-up
-  #ssh_shark("rm /mnt/%s*" % prefix)
-  os.unlink(local_query_file)
-  os.unlink(local_results_file)
+    print "Result: ", result
+    print "Raw Times: ", content
 
-  return results
+    results.append(result)
+    contents.append(content)
+
+    # Clean-up
+    #ssh_shark("rm /mnt/%s*" % prefix)
+    print "Clean Up...."
+    ssh_shark("rm /mnt/%s_results" % prefix)
+    os.remove(local_results_file)
+
+  os.remove(local_slaves_file)
+  os.remove(local_query_file)
+
+  return results, contents
 
 def run_impala_benchmark(opts):
   impala_host = opts.impala_hosts[0]
@@ -423,7 +430,7 @@ def run_impala_benchmark(opts):
   os.unlink(local_query_file)
   os.unlink(local_result_file)
 
-  return results
+  return results, contents
 
 def run_redshift_benchmark(opts):
   conn = DBAPI.connect(
@@ -460,22 +467,65 @@ def get_percentiles(in_list):
     get_pctl(in_list, .95)
   )
 
+def ssh_ret_code(host, user, id_file, cmd):
+  try:
+    return ssh(host, user, id_file, cmd)
+  except subprocess.CalledProcessError as e:
+    return e.returncode
+
+def ensure_spark_stopped_on_slaves(slaves):
+  stop = False
+  while not stop:
+    cmd = "jps |grep ExecutorBackend"
+    ret_vals = map(lambda s: ssh_ret_code(s, "root", opts.shark_identity_file, cmd), slaves)
+    print ret_vals
+    if 0 in ret_vals:
+      print "Spark is still running on some slaves... sleeping"
+      time.sleep(10)
+    else:
+      stop = True
+
 def main():
+  global opts
   opts = parse_args()
   print "Query %s:" % opts.query_num
   if opts.impala:
-    results = run_impala_benchmark(opts)
+    results, contents = run_impala_benchmark(opts)
   if opts.shark:
-    results = run_shark_benchmark(opts)
+    results, contents = run_shark_benchmark(opts)
   if opts.redshift:
     results = run_redshift_benchmark(opts)
+
+  if opts.impala:
+    if opts.clear_buffer_cache:
+      fname = "impala_disk"
+    else:
+      fname = "impala_mem"
+  elif opts.shark and opts.shark_no_cache:
+    fname = "shark_disk"
+  elif opts.shark:
+    fname = "shark_mem"
+  elif opts.redshift:
+    fname = "redshift"
 
   def prettylist(lst):
     return ",".join([str(k) for k in lst]) 
 
-  print "Results: %s" % prettylist(results)
-  print "Percentiles: %s" % get_percentiles(results)
-  print "Best: %s"  % min(results)
+  output = StringIO()
+  outfile = open('results/%s_%s_%s' % (fname, opts.query_num, datetime.datetime.now()), 'w')
+
+  print >> output, "=================================="
+  print >> output, "Results: %s" % prettylist(results)
+  print >> output, "Percentiles: %s" % get_percentiles(results)
+  print >> output, "Best: %s"  % min(results)
+  if not opts.redshift:
+    print >> output, "Contents: \n%s" % str(prettylist(contents))
+
+  print output.getvalue()
+  print >> outfile, output.getvalue()
+
+  output.close()
+  outfile.close()
 
 if __name__ == "__main__":
   main()
