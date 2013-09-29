@@ -3,8 +3,9 @@ title: Big Data Benchmark
 layout: default
 ---
 
-_This is an open source benchmark which compares the performance of several large scale data-processing frameworks._
+_**Here from HackerNews? This was originally posted several months ago. Check back in two weeks for an updated benchmark including newer versions of Hive, Impala, and Shark.**_  
 
+<!-- This is an open source benchmark which compares the performance of several large scale data-processing frameworks. -->
 
 <h2 id="introduction">Introduction</h2>
 
@@ -45,14 +46,14 @@ Our dataset and queries are inspired by the benchmark contained in "[A compariso
   <tr>
     <td></td>
     <td markdown="1" align="center" valign="top">
-{% highlight sql %}
+{% highlight mysql %}
 pageURL VARCHAR(300)
 pageRank INT
 avgDuration INT
 {% endhighlight %}
     </td>
     <td align="center" valign="top">
-{% highlight sql %}
+{% highlight mysql %}
 sourceIP VARCHAR(116)
 destURL VARCHAR(100)
 visitDate DATE
@@ -159,7 +160,7 @@ We launch EC2 clusters and run each query several times. We report the median re
 
 <h4 id="query1">1. Scan Query </h4>
 
-{% highlight sql %}
+{% highlight mysql %}
 SELECT pageURL, pageRank FROM rankings WHERE pageRank > X
 {% endhighlight %}
 
@@ -211,7 +212,7 @@ Both Shark and Impala outperform Hive by 3-4X due in part to more efficient task
 
 <h4 id="query2">2. Aggregation Query</h4>
 
-{% highlight sql %}
+{% highlight mysql %}
 SELECT SUBSTR(sourceIP, 1, X), SUM(adRevenue) FROM uservisits GROUP BY SUBSTR(sourceIP, 1, X)
 {% endhighlight %}
 
@@ -261,7 +262,7 @@ Redshift's columnar storage provides greater benefit than in Query 1 since sever
 <!-- Important to note is that Impala and Redshift perform _streaming aggregations_, where intermediate results are not persisted to disk and all must run concurrently. Shark and Hive write intermediate results to disk before shuffling them. In both this and the following query, the all intermediate data fits within the OS buffer for Shark/Hive. -->
 
 <h4 id="query3">3. Join Query </h4>
-{% highlight sql %}
+{% highlight mysql %}
 SELECT sourceIP, totalRevenue, avgPageRank
 FROM
   (SELECT sourceIP,
@@ -319,7 +320,7 @@ This query joins a smaller table to a larger table then sorts the results.
 When the join is small (3A), all frameworks spend the majority of time scanning the large table and performing date comparisons. For larger joins, the initial scan becomes a less significant fraction of overall response time. For this reason the gap between in-memory and on-disk representations diminishes in query 3C. All frameworks perform partitioned joins to answer this query. CPU (due to hashing join keys) and network IO (due to shuffling data) are the primary bottlenecks. Redshift has an edge in this case because the overall network capacity in the cluster is higher.
 
 <h4 id="query4">4. UDF Query</h4>
-{% highlight 'sql' %}
+{% highlight mysql %}
 CREATE TABLE url_counts_partial AS 
   SELECT TRANSFORM (line)
     USING "python /root/url_count.py" as (sourcePage, destPage, cnt) 
