@@ -234,8 +234,8 @@ def run_shark_benchmark(opts):
     command = "source /root/.bash_profile; %s" % command
     ssh(opts.shark_host, "root", opts.shark_identity_file, command)
 
-  LOCAL_CLEAN_QUERY = CLEAN_QUERY
-  LOCAL_QUERY_MAP = QUERY_MAP
+  local_clean_query = CLEAN_QUERY
+  local_query_map = QUERY_MAP
 
   prefix = str(time.time()).split(".")[0]
   query_file_name = "%s_workload.sh" % prefix
@@ -272,12 +272,12 @@ def run_shark_benchmark(opts):
 
   # Create cached queries for Shark Mem
   if not opts.shark_no_cache:
-    LOCAL_CLEAN_QUERY = make_output_cached(CLEAN_QUERY)
+    local_clean_query = make_output_cached(CLEAN_QUERY)
 
     def convert_to_cached(query):
       return (make_output_cached(make_input_cached(query[0])), )
 
-    LOCAL_QUERY_MAP = {k: convert_to_cached(v) for k, v in QUERY_MAP.items()}
+    local_query_map = {k: convert_to_cached(v) for k, v in QUERY_MAP.items()}
 
     # Set up cached tables
     if '4' in opts.query_num:
@@ -295,8 +295,8 @@ def run_shark_benchmark(opts):
                     """
 
   if '4' not in opts.query_num:
-    query_list += LOCAL_CLEAN_QUERY
-  query_list += LOCAL_QUERY_MAP[opts.query_num][0]
+    query_list += local_clean_query
+  query_list += local_query_map[opts.query_num][0]
 
   query_list = re.sub("\s\s+", " ", query_list.replace('\n', ' '))
 
