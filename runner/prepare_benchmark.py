@@ -150,12 +150,13 @@ def add_aws_credentials(remote_host, remote_user, identity_file,
 
 def prepare_shark_dataset(opts):
   def ssh_shark(command):
+    command = "source /root/.bash_profile; %s" % command
     ssh(opts.shark_host, "root", opts.shark_identity_file, command)
 
   if not opts.skip_s3_import:  
     print "=== IMPORTING BENCHMARK DATA FROM S3 ==="
     try:
-      ssh_impala("hdfs dfs -mkdir /user/shark/benchmark")
+      ssh_shark("/root/ephemeral-hdfs/bin/hdfs dfs -mkdir /user/shark/benchmark")
     except Exception:
       pass # Folder may already exist
 
@@ -192,26 +193,26 @@ def prepare_shark_dataset(opts):
   ssh_shark("/root/spark-ec2/copy-dir /root/url_count.py")
   
   ssh_shark(
-    "/root/shark-0.2/bin/shark -e \"DROP TABLE IF EXISTS rankings; " \
+    "/root/shark/bin/shark -e \"DROP TABLE IF EXISTS rankings; " \
     "CREATE EXTERNAL TABLE rankings (pageURL STRING, pageRank INT, " \
     "avgDuration INT) ROW FORMAT DELIMITED FIELDS TERMINATED BY \\\",\\\" " \
     "STORED AS TEXTFILE LOCATION \\\"/user/shark/benchmark/rankings\\\";\"")
 
   ssh_shark(
-    "/root/shark-0.2/bin/shark -e \"DROP TABLE IF EXISTS scratch; " \
+    "/root/shark/bin/shark -e \"DROP TABLE IF EXISTS scratch; " \
     "CREATE EXTERNAL TABLE scratch (pageURL STRING, pageRank INT, " \
     "avgDuration INT) ROW FORMAT DELIMITED FIELDS TERMINATED BY \\\",\\\" " \
     "STORED AS TEXTFILE LOCATION \\\"/user/shark/benchmark/scratch\\\";\"")
 
   ssh_shark(
-    "/root/shark-0.2/bin/shark -e \"DROP TABLE IF EXISTS uservisits; " \
+    "/root/shark/bin/shark -e \"DROP TABLE IF EXISTS uservisits; " \
     "CREATE EXTERNAL TABLE uservisits (sourceIP STRING,destURL STRING," \
     "visitDate STRING,adRevenue DOUBLE,userAgent STRING,countryCode STRING," \
     "languageCode STRING,searchWord STRING,duration INT ) " \
     "ROW FORMAT DELIMITED FIELDS TERMINATED BY \\\",\\\" " \
     "STORED AS TEXTFILE LOCATION \\\"/user/shark/benchmark/uservisits\\\";\"")
   
-  ssh_shark("/root/shark-0.2/bin/shark -e \"DROP TABLE IF EXISTS documents; " \
+  ssh_shark("/root/shark/bin/shark -e \"DROP TABLE IF EXISTS documents; " \
     "CREATE EXTERNAL TABLE documents (line STRING) STORED AS TEXTFILE " \
     "LOCATION \\\"/user/shark/benchmark/crawl\\\";\"")
 
