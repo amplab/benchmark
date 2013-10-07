@@ -512,15 +512,18 @@ To allow this benchmark to be easily reproduced, we've prepared various sizes of
 ### Launching and Loading Clusters
 
 1. Create an Impala, Redshift, Hive or Shark cluster using their provided provisioning tools.
+  * Each cluster should be created in the US East EC2 Region
   * For Redshift, use the [Amazon AWS console](https://console.aws.amazon.com/redshift/). Make sure to whitelist the node you plan to run the benchmark from in the Redshift control panel.
   * For Impala and Hive, use the [Cloudera Manager EC2 deployment instructions](http://blog.cloudera.com/blog/2013/03/how-to-create-a-cdh-cluster-on-amazon-ec2-via-cloudera-manager/). Make sure to upload your own RSA key so that you can use the same key to log into the nodes and run queries.
-  * For Shark, use the [Spark/Shark EC2 launch scripts](http://spark-project.org/docs/latest/ec2-scripts.html). You can checkout Spark with the following command: `git clone https://github.com/pwendell/spark -b benchmark` launch with AMI `ami-09473260`.
+  * For Shark, use the [Spark/Shark EC2 launch scripts](http://spark-project.org/docs/latest/ec2-scripts.html). These are available as part of the latest Spark distribution.
+  * {% highlight bash %}
+$> ec2/spark-ec2 -s 5 -k [KEY PAIR NAME] -i [IDENTITY FILE] --hadoop-major-version=2 -t "m2.4xlarge" launch [CLUSTER NAME] {% endhighlight %} **NOTE:** You must set **AWS\_ACCESS\_KEY\_ID** and **AWS\_SECRET\_ACCESS\_KEY** environment variables.
 
 2. Scripts for preparing data are included in the [benchmark github repo](https://github.com/amplab/benchmark.git). Use the provided `prepare-benchmark.sh` to load an appropriately sized dataset into the cluster. <br><br> `./prepare-benchmark.sh --help`
 
 Here are a few examples showing the options used in this benchmark...
 
-<table stle="width:800px;margin-top:20px;">
+<table style="width:1000px;margin-top:20px;">
   <tr>
     <th>Redshift</th>
     <th>Shark</th>
@@ -558,13 +561,44 @@ $> ./prepare-benchmark.sh
   --impala
   --aws-key-id=[AWS KEY ID]
   --aws-key=[AWS KEY]
-  --impala-host=[SHARK MASTER]
+  --impala-host=[NAME NODE]
   --impala-identity-file=[IDENTITY FILE]
   --scale-factor=5
   --file-format=sequence-snappy
 
 {% endhighlight %}
-</td></tr></table>
+</td></tr>
+
+<tr valign="top">
+<td>
+{% highlight bash %}
+$> ./run-query.sh
+--redshift
+--redshift-username=[USERNAME]
+--redshift-password=[PASSWORD]
+--redshift-host=[ODBC HOST]
+--redshift-database=[DATABASE]
+--query-num=[QUERY NUM]
+{% endhighlight %}
+</td><td>
+{% highlight bash %}
+$> ./run-query.sh
+--shark
+--shark-host=[SHARK MASTER]
+--shark-identity-file=[IDENTITY FILE]
+--query-num=[QUERY NUM]
+{% endhighlight %}
+</td><td>
+{% highlight bash %}
+$> ./run-query.sh
+--impala
+--impala-hosts=[COMMA SEPARATED LIST OF IMPALA NODES]
+--impala-identity-file=[IDENTITY FILE]
+--query-num=[QUERY NUM]
+{% endhighlight %}
+</td></tr>
+
+</table>
 
 <ol>
 <li value="3"> If you are adding a new framework or using this to produce your own scientific performance numbers, get in touch with us. The virtualized environment of EC2 makes eeking out the best results a bit tricky. We can help.

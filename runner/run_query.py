@@ -473,7 +473,7 @@ def main():
   def prettylist(lst):
     return ",".join([str(k) for k in lst]) 
 
-  print "Resutlts: %s" % prettylist(results)
+  print "Results: %s" % prettylist(results)
   print "Percentiles: %s" % get_percentiles(results)
   print "Best: %s"  % min(results)
 
