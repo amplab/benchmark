@@ -10,8 +10,9 @@ import sys
 from sys import stderr
 from optparse import OptionParser
 import os
-import datetime
 import time
+import datetime
+import re
 from StringIO import StringIO
 from pg8000 import DBAPI
 
@@ -212,13 +213,9 @@ def parse_args():
 
 # Run a command on a host through ssh, throwing an exception if ssh fails
 def ssh(host, username, identity_file, command):
-  print command
-  command = "source /root/.bash_profile; %s" % command
-  cmd = "ssh -t -o StrictHostKeyChecking=no -i %s %s@%s '%s'" % (identity_file,
-                                                                 username,
-                                                                 host, command)
-  #subprocess.check_call(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-  return subprocess.check_call(cmd, shell=True)
+  return subprocess.check_call(
+      "ssh -t -o StrictHostKeyChecking=no -i %s %s@%s '%s'" %
+      (identity_file, username, host, command), shell=True)
 
 # Copy a file to a given host through scp, throwing an exception if scp fails
 def scp_to(host, identity_file, username, local_file, remote_file):
@@ -233,16 +230,12 @@ def scp_from(host, identity_file, username, remote_file, local_file):
       (identity_file, username, host, remote_file, local_file), shell=True)
 
 def run_shark_benchmark(opts):
-  global CLEAN_QUERY, QUERY_MAP
   def ssh_shark(command):
+    command = "source /root/.bash_profile; %s" % command
     ssh(opts.shark_host, "root", opts.shark_identity_file, command)
 
-  print "Restarting standalone scheduler..."
-  ssh_shark("/root/spark/bin/stop-all.sh")
-  time.sleep(30)
-  ssh_shark("/root/spark/bin/stop-all.sh")
-  ssh_shark("/root/spark/bin/start-all.sh")
-  time.sleep(10)
+  LOCAL_CLEAN_QUERY = CLEAN_QUERY
+  LOCAL_QUERY_MAP = QUERY_MAP
 
   prefix = str(time.time()).split(".")[0]
   query_file_name = "%s_workload.sh" % prefix
@@ -250,12 +243,25 @@ def run_shark_benchmark(opts):
   local_query_file = os.path.join(LOCAL_TMP_DIR, query_file_name)
   local_slaves_file = os.path.join(LOCAL_TMP_DIR, slaves_file_name)
   query_file = open(local_query_file, 'w')
-  remote_query_file = "/mnt/%s" % query_file_name
-  remote_tmp_file = "/mnt/%s_out" % prefix
   remote_result_file = "/mnt/%s_results" % prefix
+  remote_tmp_file = "/mnt/%s_out" % prefix
+  remote_query_file = "/mnt/%s" % query_file_name
 
   runner = "/root/shark/bin/shark-withinfo"
-  
+
+  print "Getting Slave List"
+  scp_from(opts.shark_host, opts.shark_identity_file, "root",
+           "/root/spark-ec2/slaves", local_slaves_file)
+  slaves = map(str.strip, open(local_slaves_file).readlines())
+
+  print "Restarting standalone scheduler..."
+  ssh_shark("/root/spark/bin/stop-all.sh")
+  ensure_spark_stopped_on_slaves(slaves)
+  time.sleep(30)
+  ssh_shark("/root/spark/bin/stop-all.sh")
+  ssh_shark("/root/spark/bin/start-all.sh")
+  time.sleep(10)
+
   # Two modes here: Shark Mem and Shark Disk. If using Shark disk clear buffer
   # cache in-between each query. If using Shark Mem, used cached tables.
 
@@ -266,12 +272,12 @@ def run_shark_benchmark(opts):
 
   # Create cached queries for Shark Mem
   if not opts.shark_no_cache:
-    CLEAN_QUERY = make_output_cached(CLEAN_QUERY)
+    LOCAL_CLEAN_QUERY = make_output_cached(CLEAN_QUERY)
 
     def convert_to_cached(query):
       return (make_output_cached(make_input_cached(query[0])), )
 
-    QUERY_MAP = {k: convert_to_cached(v) for k, v in QUERY_MAP.items()}
+    LOCAL_QUERY_MAP = {k: convert_to_cached(v) for k, v in QUERY_MAP.items()}
 
     # Set up cached tables
     if '4' in opts.query_num:
@@ -289,10 +295,9 @@ def run_shark_benchmark(opts):
                     """
 
   if '4' not in opts.query_num:
-    query_list += CLEAN_QUERY
-  query_list += QUERY_MAP[opts.query_num][0]
+    query_list += LOCAL_CLEAN_QUERY
+  query_list += LOCAL_QUERY_MAP[opts.query_num][0]
 
-  import re
   query_list = re.sub("\s\s+", " ", query_list.replace('\n', ' '))
 
   print "\nQuery:"
@@ -314,11 +319,6 @@ def run_shark_benchmark(opts):
   scp_to(opts.shark_host, opts.shark_identity_file, "root", local_query_file,
       remote_query_file)
   ssh_shark("chmod 775 %s" % remote_query_file)
-
-  print "Getting Slave List"
-  scp_from(opts.shark_host, opts.shark_identity_file, "root",
-           "/root/spark-ec2/slaves", local_slaves_file)
-  slaves = map(str.strip, open(local_slaves_file).readlines())
 
   # Run benchmark
   print "Running remote benchmark..."
@@ -476,7 +476,7 @@ def ssh_ret_code(host, user, id_file, cmd):
 def ensure_spark_stopped_on_slaves(slaves):
   stop = False
   while not stop:
-    cmd = "jps |grep ExecutorBackend"
+    cmd = "jps | grep ExecutorBackend"
     ret_vals = map(lambda s: ssh_ret_code(s, "root", opts.shark_identity_file, cmd), slaves)
     print ret_vals
     if 0 in ret_vals:

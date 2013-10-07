@@ -108,12 +108,9 @@ def parse_args():
 
 # Run a command on a host through ssh, throwing an exception if ssh fails
 def ssh(host, username, identity_file, command):
-  command = "source /root/.bash_profile; %s" % command
-  cmd = "ssh -t -o StrictHostKeyChecking=no -i %s %s@%s '%s'" % (identity_file,
-                                                                 username,
-                                                                 host, command)
-  print cmd
-  subprocess.check_call(cmd, shell=True)
+  subprocess.check_call(
+      "ssh -t -o StrictHostKeyChecking=no -i %s %s@%s '%s'" %
+      (identity_file, username, host, command), shell=True)
 
 # Copy a file to a given host through scp, throwing an exception if scp fails
 def scp_to(host, identity_file, username, local_file, remote_file):
@@ -153,6 +150,7 @@ def add_aws_credentials(remote_host, remote_user, identity_file,
 
 def prepare_shark_dataset(opts):
   def ssh_shark(command):
+    command = "source /root/.bash_profile; %s" % command
     ssh(opts.shark_host, "root", opts.shark_identity_file, command)
 
   if not opts.skip_s3_import:  
