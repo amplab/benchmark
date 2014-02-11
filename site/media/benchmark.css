@@ -42,3 +42,7 @@ h2,h3.collapsed {
   font-style: italic;
   font-weight: bold;
 }
+
+.olddata {
+  background: rgba(54, 25, 25, .3);
+}

@@ -1,0 +1,28 @@
+#!/usr/bin/python
+
+# Add configuration values to an existing Hadoop configuration file.
+# Note: properties are not deduplicated.
+
+import sys
+from xml.dom import minidom
+
+try:
+	configFile = sys.argv[1]
+	newFile = sys.argv[2]
+except:
+	print "Usage: mergeHadoopConfig config1 config2"
+	sys.exit(1)
+
+# Parse the existing config file.
+config = minidom.parse(configFile)
+
+# Get the changes we will merge into this config file.
+newStuff = minidom.parse(newFile)
+
+# Add the changes in.
+originalConfig = config.getElementsByTagName('configuration')[0]
+newConfig = newStuff.getElementsByTagName('configuration')[0]
+originalConfig.childNodes.extend(newConfig.childNodes)
+
+# Output the file.
+print config.toxml()
