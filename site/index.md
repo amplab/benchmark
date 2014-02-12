@@ -169,7 +169,7 @@ duration INT
 </div>
 
  * [Query 1](#query1) and [Query 2](#query2) are exploratory SQL queries. We vary the size of the result to expose scaling properties of each systems.
-    * Varaint A: __BI-Like__ - result sets are small (e.g., could fit in memory in a BI tool)
+    * Variant A: __BI-Like__ - result sets are small (e.g., could fit in memory in a BI tool)
     * Variant B: __Intermediate__ - result set may not fit in memory on one node
     * Variant C: __ETL-Like__ - result sets are large and require several nodes to store
 
@@ -243,7 +243,7 @@ For Impala, Hive, Tez, and Shark, this benchmark uses the m2.4xlarge EC2 instanc
 </div>
 
 
-<h3 id="results"> Results | December 2013</h3>
+<h3 id="results"> Results | February 2014</h3>
 
 We launch EC2 clusters and run each query several times. We report the median response time here. Except for Redshift, all data is stored on HDFS in compressed SequenceFile format. Each query is run with seven frameworks:
 
