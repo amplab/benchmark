@@ -99,7 +99,7 @@ For Impala, Hive, and Shark, this benchmark uses the m2.4xlarge EC2 instance typ
     <td>68.4 GB</td>
     <td>1680GB (2HDD)</td>
     <td>8</td>
-    <td>.41</td>
+    <td>1.640</td>
   </tr>
   <tr>
     <td>Redshift</td>
