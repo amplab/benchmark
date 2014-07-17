@@ -1,0 +1,39 @@
+set hive.enforce.bucketing=true;
+set hive.enforce.sorting=true;
+set hive.map.aggr=true;
+set hive.optimize.bucketmapjoin=false;
+set hive.optimize.bucketmapjoin.sortedmerge=false;
+set hive.mapred.reduce.tasks.speculative.execution=false;
+set hive.auto.convert.join=true;
+set hive.auto.convert.sortmerge.join=false;
+set hive.auto.convert.sortmerge.join.noconditionaltask=false;
+set hive.auto.convert.join.noconditionaltask=true;
+set hive.auto.convert.join.noconditionaltask.size=64000000;
+set hive.optimize.reducededuplication.min.reducer=1;
+set hive.optimize.mapjoin.mapreduce=true;
+set hive.stats.autogather=true;
+set mapred.reduce.parallel.copies=30;
+set mapred.job.shuffle.input.buffer.percent=0.5;
+set mapred.job.reduce.input.buffer.percent=0.2;
+set mapreduce.map.output.compress=true;
+set mapreduce.map.output.compress.codec=org.apache.hadoop.io.compress.SnappyCodec;
+set hive.orc.splits.include.file.footer=true;
+set hive.root.logger=ERROR;
+set hive.vectorized.execution.enabled=true;
+
+set hive.optimize.tez=true;
+set hive.vectorized.execution.enabled=true;
+set hive.compute.query.using.stats=true;
+set hive.input.format=org.apache.hadoop.hive.ql.io.HiveInputFormat;
+set hive.orc.splits.include.file.footer=true;
+set hive.stats.autogather=true;
+set hive.auto.convert.join.noconditionaltask.size=64000000;
+
+set hive.vectorized.groupby.maxentries=1024;
+set hive.vectorized.groupby.checkinterval=1024;
+set hive.vectorized.groupby.flush.percent=1.0;
+
+set hive.input.format=org.apache.hadoop.hive.ql.io.HiveInputFormat;
+
+set hive.limit.pushdown.memory.usage=0.02;
+
