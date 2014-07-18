@@ -19,6 +19,19 @@
 # limitations under the License.
 #
 
+# TODO: login doesn't work
+
+# TODO(zongheng): ./prepare_hdp should save the hostnames to somewhere instead
+# of only printing them out.
+
+# TODO(zongheng): diff this script w/ corresponding spark_ec2.py, and port the
+# diff to latest spark_ec2.py.
+
+# TODO(zongheng): change HDP version to the latest version
+
+# TODO(zongheng): in the ./prepare_hdp.sh launch cluster step, there are three
+# places that need ENTER. Something like "enter | ..."?
+
 from __future__ import with_statement
 
 import logging
@@ -67,12 +80,12 @@ def parse_args():
                     default="ami-a25415cb")
   parser.add_option("-v", "--spark-version", default="0.8.0",
       help="Version of Spark to use: 'X.Y.Z' or a specific git hash")
-  parser.add_option("--spark-git-repo", 
-      default="https://github.com/mesos/spark", 
+  parser.add_option("--spark-git-repo",
+      default="https://github.com/mesos/spark",
       help="Github repo from which to checkout supplied commit hash")
   parser.add_option("--hadoop-major-version", default="1",
       help="Major version of Hadoop (default: 1)")
-  parser.add_option("-D", metavar="[ADDRESS:]PORT", dest="proxy_port", 
+  parser.add_option("-D", metavar="[ADDRESS:]PORT", dest="proxy_port",
       help="Use SSH dynamic port forwarding to create a SOCKS proxy at " +
             "the given local address (for use with login)")
   parser.add_option("--resume", action="store_true", default=False,
@@ -106,7 +119,7 @@ def parse_args():
     print >> stderr, ("ERROR: The -i or --identity-file argument is " +
                       "required for " + action)
     sys.exit(1)
-  
+
   # Boto config check
   # http://boto.cloudhackers.com/en/latest/boto_config_tut.html
   home_dir = os.getenv('HOME')
@@ -364,10 +377,13 @@ def get_existing_cluster(conn, OPTS, cluster_name, die_on_error=True):
   master_nodes = []
   slave_nodes = []
   ambari_nodes = []
+  # print "reservations: ", str(reservations)
   for res in reservations:
     active = [i for i in res.instances if is_active(i)]
     if len(active) > 0:
+      # print "found active instances", active
       group_names = [g.name for g in res.groups]
+      # print group_names
       if group_names == [cluster_name + "-master"]:
         master_nodes += res.instances
       elif group_names == [cluster_name + "-slaves"]:
@@ -597,7 +613,36 @@ def main():
       print "Terminating slaves..."
       for inst in slave_nodes:
         inst.terminate()
-
+  elif action == "stop":
+      response = raw_input(
+          "Are you sure you want to stop the cluster " +
+          cluster_name + "?\nDATA ON EPHEMERAL DISKS WILL BE LOST, " +
+          "BUT THE CLUSTER WILL KEEP USING SPACE ON\n" +
+          "AMAZON EBS IF IT IS EBS-BACKED!!\n" +
+          "All data on spot-instance slaves will be lost.\n" +
+          "Stop cluster " + cluster_name + " (y/N): ")
+      if response == "y":
+          (master_nodes, slave_nodes, ambari_nodes) = get_existing_cluster(
+              conn, OPTS, cluster_name, die_on_error=False)
+          # print "GOT NODES: " + str((master_nodes, slave_nodes, ambari_nodes))
+          print "Stopping master..."
+          for inst in master_nodes:
+              if inst.state not in ["shutting-down", "terminated"]:
+                  inst.stop()
+          print "Stopping slaves..."
+          for inst in slave_nodes:
+              if inst.state not in ["shutting-down", "terminated"]:
+                  if inst.spot_instance_request_id:
+                      inst.terminate()
+                  else:
+                      inst.stop()
+          print "Stopping ambari..."
+          for inst in slave_nodes:
+              if inst.state not in ["shutting-down", "terminated"]:
+                  if inst.spot_instance_request_id:
+                      inst.terminate()
+                  else:
+                      inst.stop()
 
 def concurrent_map(func, data):
     """
