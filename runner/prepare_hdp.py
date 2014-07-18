@@ -444,7 +444,7 @@ def setup_cluster(conn, master_nodes, slave_nodes, ambari_nodes, OPTS, deploy_ss
   print "Master: %s" % master.private_dns_name
   print "Slaves:"
   for slave in slave_nodes:
-    print slave.private_dns_name
+    print "\t", slave.private_dns_name
 
 def enable_root(node):
   cmd = """
