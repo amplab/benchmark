@@ -642,7 +642,7 @@ Once complete, it will report both the internal and external hostnames of each n
   1. SSH into the Ambari node as root and run `ambari-server start`
   2. Visit port 8080 of the Ambari node and login (by default, both username and password are `admin`) to begin cluster setup.
   3. When prompted to enter hosts, you must use the interal EC2 hostnames.
-  4. Install all services and take care to install all master services on the node designated as master by the setup script.
+  4. Install all services, and take care to install all master services on the node designated as master (not the Ambari host) by the setup script.
   5. This installation should take 10-20 minutes. Load the benchmark data once it is complete.
 
 To install Tez on this cluster, use the following command. It will remove the ability to use normal Hive.

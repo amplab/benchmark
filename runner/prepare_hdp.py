@@ -19,6 +19,10 @@
 # limitations under the License.
 #
 
+# TODO: Ambari UI took a long time -> scriptable?
+
+# TODO: bump ambari version from 1.4.1 (current) to latest
+
 # TODO: login doesn't work
 
 # TODO(zongheng): ./prepare_hdp should save the hostnames to somewhere instead
