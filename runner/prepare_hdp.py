@@ -23,15 +23,10 @@
   # main things: (1) put all master services into master node (2) enter host
   # names (3) set admin id and passwd (and nagios requires admin email..)
 
-# TODO: bump ambari version from 1.4.1 (current) to latest
-# TODO(zongheng): change HDP version to the latest version
-
 # TODO: action 'login' doesn't work
 
 # TODO(zongheng): ./prepare_hdp should save the hostnames to somewhere instead
 # of only printing them out.
-
-# TODO: -m instance type is assigned to ambari host and master, but not the slaves.
 
 from __future__ import with_statement
 

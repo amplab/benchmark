@@ -423,8 +423,12 @@ def prepare_tez(opts):
   # JAVA_HOME="/usr/jdk64/jdk1.6.0_31" make dist install;
   # """
 
+  # FIXME: it seems Ambari 1.6 already sets up Hive and Tez correctly, so the
+  # first three blocks are probably not needed. Also tez-site.xml.physical is
+  # the same as the one shipped by Ambari 1.6.
+
   cmd = """
-  yum install -y git
+  yum install -y git screen
   git clone https://github.com/ahirreddy/benchmark.git
   cd benchmark/runner/tez
 
