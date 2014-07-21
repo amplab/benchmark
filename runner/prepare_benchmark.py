@@ -1,16 +1,20 @@
 # Copyright 2013 The Regents of The University California
-# 
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-# 
+#
 #   http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+# TODO: when doing --hive-tez, has a step that requires 'y'
+
+# TODO: update repo link from ahir to mine or amplab's
 
 """Prepare the big data benchmark on one or more EC2 or Redshift clusters.
 
@@ -105,14 +109,14 @@ def parse_args():
 
   opts.data_prefix = SCALE_FACTOR_MAP[opts.scale_factor]
 
-  if opts.impala and (opts.impala_identity_file is None or 
+  if opts.impala and (opts.impala_identity_file is None or
                       opts.impala_host is None or
                       opts.aws_key_id is None or
                       opts.aws_key is None):
     print >> stderr, "Impala requires identity file, hostname, and AWS creds"
     sys.exit(1)
-  
-  if opts.shark and (opts.shark_identity_file is None or 
+
+  if opts.shark and (opts.shark_identity_file is None or
                      opts.shark_host is None or
                      opts.aws_key_id is None or
                      opts.aws_key is None):
@@ -129,7 +133,7 @@ def parse_args():
     print >> stderr, \
         "Redshift requires host, username, password, db, and AWS credentials"
     sys.exit(1)
-  
+
   return opts
 
 # Run a command on a host through ssh, throwing an exception if ssh fails
@@ -151,20 +155,20 @@ def scp_from(host, identity_file, username, remote_file, local_file):
       (identity_file, username, host, remote_file, local_file), shell=True)
 
 # Insert AWS credentials into a given XML file on the given remote host
-def add_aws_credentials(remote_host, remote_user, identity_file, 
+def add_aws_credentials(remote_host, remote_user, identity_file,
                        remote_xml_file, aws_key_id, aws_key):
   local_xml = os.path.join(LOCAL_TMP_DIR, "temp.xml")
-  scp_from(remote_host, identity_file, remote_user, 
+  scp_from(remote_host, identity_file, remote_user,
            remote_xml_file, local_xml)
   lines = open(local_xml).readlines()
   # Manual XML munging... this makes me cry a little bit
-  lines = filter(lambda x: "configuration" not in x and "xml" not in x 
+  lines = filter(lambda x: "configuration" not in x and "xml" not in x
                            and "fs.s3" not in x, lines)
   lines = map(lambda x: x.strip(), lines)
   key_conf = "<property><name>fs.s3n.awsAccessKeyId</name>" \
     + ("<value>%s</value>" % aws_key_id) + "</property><property>" \
     + "<name>fs.s3n.awsSecretAccessKey</name>" \
-    + ("<value>%s</value>" % aws_key) + "</property>" 
+    + ("<value>%s</value>" % aws_key) + "</property>"
   lines.insert(0, "<configuration>")
   lines.append(key_conf)
   lines.append("</configuration>")
@@ -179,7 +183,7 @@ def prepare_shark_dataset(opts):
     command = "source /root/.bash_profile; %s" % command
     ssh(opts.shark_host, "root", opts.shark_identity_file, command)
 
-  if not opts.skip_s3_import:  
+  if not opts.skip_s3_import:
     print "=== IMPORTING BENCHMARK DATA FROM S3 ==="
     try:
       ssh_shark("/root/ephemeral-hdfs/bin/hdfs dfs -mkdir /user/shark/benchmark")
@@ -190,19 +194,19 @@ def prepare_shark_dataset(opts):
         "/root/mapreduce/conf/core-site.xml", opts.aws_key_id, opts.aws_key)
 
     ssh_shark("/root/mapreduce/bin/start-mapred.sh")
-    
-    ssh_shark( 
+
+    ssh_shark(
       "/root/mapreduce/bin/hadoop distcp " \
       "s3n://big-data-benchmark/pavlo/%s/%s/rankings/ " \
       "/user/shark/benchmark/rankings/" % (opts.file_format, opts.data_prefix))
 
-    ssh_shark( 
+    ssh_shark(
       "/root/mapreduce/bin/hadoop distcp " \
       "s3n://big-data-benchmark/pavlo/%s/%s/uservisits/ " \
       "/user/shark/benchmark/uservisits/" % (
         opts.file_format, opts.data_prefix))
-    
-    ssh_shark( 
+
+    ssh_shark(
       "/root/mapreduce/bin/hadoop distcp " \
       "s3n://big-data-benchmark/pavlo/%s/%s/crawl/ " \
       "/user/shark/benchmark/crawl/" % (opts.file_format, opts.data_prefix))
@@ -269,7 +273,7 @@ def prepare_shark_dataset(opts):
     "languageCode STRING,searchWord STRING,duration INT ) " \
     "ROW FORMAT DELIMITED FIELDS TERMINATED BY \\\",\\\" " \
     "STORED AS TEXTFILE LOCATION \\\"/user/shark/benchmark/uservisits\\\";\"")
-  
+
   ssh_shark("/root/shark/bin/shark -e \"DROP TABLE IF EXISTS documents; " \
     "CREATE EXTERNAL TABLE documents (line STRING) STORED AS TEXTFILE " \
     "LOCATION \\\"/user/shark/benchmark/crawl\\\";\"")
@@ -277,7 +281,7 @@ def prepare_shark_dataset(opts):
   print "=== FINISHED CREATING BENCHMARK DATA ==="
 
 def prepare_impala_dataset(opts):
-  def ssh_impala(command): 
+  def ssh_impala(command):
     ssh(opts.impala_host, "ubuntu", opts.impala_identity_file, command)
 
   if not opts.skip_s3_import:
@@ -287,24 +291,24 @@ def prepare_impala_dataset(opts):
     except Exception:
       pass # Folder may already exist
 
-    ssh_impala("sudo chmod 777 /etc/hadoop/conf/hdfs-site.xml") 
-    ssh_impala("sudo chmod 777 /etc/hadoop/conf/core-site.xml") 
+    ssh_impala("sudo chmod 777 /etc/hadoop/conf/hdfs-site.xml")
+    ssh_impala("sudo chmod 777 /etc/hadoop/conf/core-site.xml")
 
     add_aws_credentials(opts.impala_host, "ubuntu", opts.impala_identity_file,
         "/etc/hadoop/conf/hdfs-site.xml", opts.aws_key_id, opts.aws_key)
     add_aws_credentials(opts.impala_host, "ubuntu", opts.impala_identity_file,
         "/etc/hadoop/conf/core-site.xml", opts.aws_key_id, opts.aws_key)
-  
-    ssh_impala( 
+
+    ssh_impala(
       "sudo -u hdfs hadoop distcp s3n://big-data-benchmark/pavlo/%s/%s/rankings/ " \
       "/tmp/benchmark/rankings/" % (opts.file_format, opts.data_prefix))
-    ssh_impala( 
+    ssh_impala(
       "sudo -u hdfs hadoop distcp s3n://big-data-benchmark/pavlo/%s/%s/uservisits/ " \
       "/tmp/benchmark/uservisits/" % (opts.file_format, opts.data_prefix))
     ssh_impala(
       "sudo -u hdfs hadoop distcp s3n://big-data-benchmark/pavlo/%s/%s/rankings/ " \
       "/tmp/benchmark/scratch/" % (opts.file_format, opts.data_prefix))
-  
+
   print "=== CREATING HIVE TABLES FOR BENCHMARK ==="
   ssh_impala(
     "hive -e \"DROP TABLE IF EXISTS rankings; " \
@@ -312,7 +316,7 @@ def prepare_impala_dataset(opts):
     "pageRank INT, avgDuration INT) ROW FORMAT DELIMITED FIELDS " \
     "TERMINATED BY \\\"\\001\\\" " \
     "STORED AS SEQUENCEFILE LOCATION \\\"/tmp/benchmark/rankings\\\";\"")
- 
+
   ssh_impala(
     "hive -e \"DROP TABLE IF EXISTS uservisits; " \
     "CREATE EXTERNAL TABLE uservisits (sourceIP STRING, "\
@@ -442,6 +446,10 @@ def prepare_tez(opts):
   yum upgrade hadoop-yarn-resourcemanager
   """
 
+  # cmd = """
+    # echo
+    # hostname -f
+  # """
   print cmd
 
   ssh(opts.hive_host, "root", opts.hive_identity_file, cmd)
@@ -527,14 +535,14 @@ def prepare_redshift_dataset(opts):
     cursor.execute(query)
     for res in cursor:
       print res
-  
+
   def query_with_catch(cursor, query):
-    try: 
+    try:
       cursor.execute(query)
     except pg8000.errors.InternalError as e:
       print >> stderr, "Received error from pg8000: %s" % e
       print >> stderr, "Attempting to continue..."
-  
+
   conn = DBAPI.connect(
     host = opts.redshift_host,
     database = opts.redshift_database,
@@ -602,7 +610,7 @@ def print_percentiles(in_list):
 
 def main():
   opts = parse_args()
-  
+
   if opts.impala:
     prepare_impala_dataset(opts)
   if opts.shark:
