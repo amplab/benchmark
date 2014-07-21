@@ -435,12 +435,12 @@ def setup_cluster(conn, master_nodes, slave_nodes, ambari_nodes, OPTS, deploy_ss
   concurrent_map(start_services, master_nodes + slave_nodes)
 
   # FIXME?: don't hardcode this?
-  args = {
-    'runner' : '/Users/ahirreddy/Work/benchmark/spark-0.8.0-incubating/ec2/spark-ec2',
-    'keyname' : OPTS.key_pair,
-    'idfile' : OPTS.identity_file,
-    'cluster' : cluster_name,
-  }
+  # args = {
+    # 'runner' : '/Users/ahirreddy/Work/benchmark/spark-0.8.0-incubating/ec2/spark-ec2',
+    # 'keyname' : OPTS.key_pair,
+    # 'idfile' : OPTS.identity_file,
+    # 'cluster' : cluster_name,
+  # }
 
   ssh(ambari.public_dns_name, OPTS, "ambari-server start;")
 
