@@ -54,6 +54,9 @@ import boto
 from boto.ec2.blockdevicemapping import BlockDeviceMapping, BlockDeviceType
 from boto import ec2
 
+# Constants
+AMBARI_REPO_URL = """http://public-repo-1.hortonworks.com/ambari/centos6/1.x/updates/1.6.0/ambari.repo"""
+
 # Configure and parse our command-line arguments
 def parse_args():
   parser = OptionParser(usage="spark-ec2 [options] <action> <cluster_name>"
@@ -431,6 +434,7 @@ def setup_cluster(conn, master_nodes, slave_nodes, ambari_nodes, OPTS, deploy_ss
   print "Starting All Services..."
   concurrent_map(start_services, master_nodes + slave_nodes)
 
+  # FIXME?: don't hardcode this?
   args = {
     'runner' : '/Users/ahirreddy/Work/benchmark/spark-0.8.0-incubating/ec2/spark-ec2',
     'keyname' : OPTS.key_pair,
@@ -495,7 +499,7 @@ def deploy_key(node):
 # with install process
 def setup_ambari_master(ambari, OPTS):
   cmd = """
-        wget http://public-repo-1.hortonworks.com/ambari/centos6/1.x/updates/1.4.1.25/ambari.repo;
+        wget %s;
         cp ambari.repo /etc/yum.repos.d;
         yum -y install epel-release;
         yum -y repolist;
@@ -503,7 +507,7 @@ def setup_ambari_master(ambari, OPTS):
         ambari-server setup;
         ambari-server start;
         ambari-server status;
-        """
+        """ % AMBARI_REPO_URL
   ssh(ambari.public_dns_name, OPTS, cmd, stdin=None)
 
 
