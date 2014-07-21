@@ -33,8 +33,7 @@
 
 # TODO(zongheng): change HDP version to the latest version
 
-# TODO(zongheng): in the ./prepare_hdp.sh launch cluster step, there are three
-# places that need ENTER. Something like "enter | ..."?
+# TODO: -m instance type is assigned to ambari host and master, but not the slaves.
 
 from __future__ import with_statement
 
@@ -495,19 +494,24 @@ def deploy_key(node):
     ssh(node.public_dns_name, OPTS, 'chmod 600 ~/.ssh/id_rsa')
 
 # Setup the Ambari Master and start the ambari server
-# TODO: Find a way to completely automate, currently user has to interact
-# with install process
 def setup_ambari_master(ambari, OPTS):
+  # Hack: attempt to skip user interaction in the setup process by using the default options.
+  # Works the first time this setup command is called on a node.
+  #     n: customize user account for ambari-server daemon [y/n] (n)?
+  #     y: Do you accept the Oracle Binary Code License Agreement [y/n] (y)?
+  #     n: Enter advanced database configuration [y/n] (n)?
+  ambari_setup_cmd = """yes "" | ambari-server setup"""
   cmd = """
         wget %s;
         cp ambari.repo /etc/yum.repos.d;
         yum -y install epel-release;
         yum -y repolist;
         yum -y install ambari-server;
-        ambari-server setup;
+        %s;
         ambari-server start;
         ambari-server status;
-        """ % AMBARI_REPO_URL
+        """ % (AMBARI_REPO_URL, ambari_setup_cmd)
+
   ssh(ambari.public_dns_name, OPTS, cmd, stdin=None)
 
 
