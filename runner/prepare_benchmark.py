@@ -416,12 +416,12 @@ def prepare_hive_dataset(opts):
   print "=== FINISHED CREATING BENCHMARK DATA ==="
 
 def prepare_tez(opts):
-  old_cmd = """
-  yum install -y git;
-  git clone https://github.com/t3rmin4t0r/tez-autobuild.git;
-  cd tez-autobuild;
-  JAVA_HOME="/usr/jdk64/jdk1.6.0_31" make dist install;
-  """
+  # old_cmd = """
+  # yum install -y git;
+  # git clone https://github.com/t3rmin4t0r/tez-autobuild.git;
+  # cd tez-autobuild;
+  # JAVA_HOME="/usr/jdk64/jdk1.6.0_31" make dist install;
+  # """
 
   cmd = """
   yum install -y git

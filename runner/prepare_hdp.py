@@ -20,18 +20,16 @@
 #
 
 # TODO: Ambari UI took a long time -> scriptable?
+  # main things: (1) put all master services into master node (2) enter host
+  # names (3) set admin id and passwd (and nagios requires admin email..)
 
 # TODO: bump ambari version from 1.4.1 (current) to latest
+# TODO(zongheng): change HDP version to the latest version
 
-# TODO: login doesn't work
+# TODO: action 'login' doesn't work
 
 # TODO(zongheng): ./prepare_hdp should save the hostnames to somewhere instead
 # of only printing them out.
-
-# TODO(zongheng): diff this script w/ corresponding spark_ec2.py, and port the
-# diff to latest spark_ec2.py.
-
-# TODO(zongheng): change HDP version to the latest version
 
 # TODO: -m instance type is assigned to ambari host and master, but not the slaves.
 
@@ -466,6 +464,7 @@ def enable_root(node):
 
 def configure_node(node):
   cmd = """
+        yum -y install screen;
         yum -y install git;
         sed -e 's/SELINUX=enforcing//g' /etc/selinux/config > /etc/selinux/config;
         echo "SELINUX=disabled" >> /etc/selinux/config;
