@@ -252,6 +252,7 @@ def parse_args():
     hosts = opts.impala_hosts.split(",")
     print >> stderr, "Impala hosts:\n%s" % "\n".join(hosts)
     opts.impala_hosts = hosts
+
   if opts.hive or opts.hive_cdh:
     opts.hive_slaves = opts.hive_slaves.split(",")
     print >> stderr, "Hive slaves:\n%s" % "\n".join(opts.hive_slaves)
@@ -782,7 +783,9 @@ def ensure_spark_stopped_on_slaves(slaves):
 def main():
   global opts
   opts = parse_args()
+
   print "Query %s:" % opts.query_num
+
   if opts.impala:
     results, contents = run_impala_benchmark(opts)
   if opts.shark:

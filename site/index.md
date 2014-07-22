@@ -751,6 +751,15 @@ $> ./prepare-benchmark.sh
 --scale-factor=5
 {% endhighlight %}
 </td><td>
+{% highlight bash %}
+$> ./run-query.sh
+--hive
+[--tez]
+--hive-host [MASTER REPORTED BY SETUP SCRIPT]
+--hive-slaves [COMMA SEPARATED LIST OF SLAVES]
+--hive-identity-file [SSH PRIVATE KEY]
+--query-num=[QUERY NUM]
+{% endhighlight %}
 </td><td>
 </td></tr>
 
