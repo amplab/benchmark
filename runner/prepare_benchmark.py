@@ -14,6 +14,8 @@
 
 # TODO: when doing --hive-tez, has a step that requires 'y'
 
+# TODO: install gcc, for something like https://github.com/cartershanklin/hive-testbench?
+
 # TODO: update repo link from ahir to mine or amplab's
 
 """Prepare the big data benchmark on one or more EC2 or Redshift clusters.
@@ -416,43 +418,41 @@ def prepare_hive_dataset(opts):
   print "=== FINISHED CREATING BENCHMARK DATA ==="
 
 def prepare_tez(opts):
-  # old_cmd = """
-  # yum install -y git;
-  # git clone https://github.com/t3rmin4t0r/tez-autobuild.git;
-  # cd tez-autobuild;
-  # JAVA_HOME="/usr/jdk64/jdk1.6.0_31" make dist install;
-  # """
-
-  # FIXME: it seems Ambari 1.6 already sets up Hive and Tez correctly, so the
-  # first three blocks are probably not needed. Also tez-site.xml.physical is
-  # the same as the one shipped by Ambari 1.6.
+  """
+  DIFFERENCE FROM FEB 2014's BIGDATA BENCHMARK: this updated suite of scripts
+  installs Ambari 1.6, which ships with official Hive 0.13, hence Stinger
+  Preview Stg 3 is no longer manually pulled in, and we keep the installations
+  as close to each component's default settings as possible.  However, the
+  Stinger Stg 3 document lists some tunable configs that might improve query
+  performance that we could look at in the future.
+  """
+  # TODO: ahir's configs/tez-site.xml is different from Ambari's /etc/tez/conf/tez-site.xml
+  # (e.g. contains pre-warming settings)
+  # TODO: the conf.server line is confusing - why is it necessary?
 
   cmd = """
-  yum install -y git screen
-  git clone https://github.com/ahirreddy/benchmark.git
-  cd benchmark/runner/tez
-
-  cp -r tez-0.2.0.2.1.0.0-92 /opt
-  HADOOP_USER_NAME=hdfs hadoop fs -mkdir -p /apps/tez
-  HADOOP_USER_NAME=hdfs hadoop fs -chmod 755 /apps/tez
-  HADOOP_USER_NAME=hdfs hadoop fs -copyFromLocal /opt/tez-0.2.0.2.1.0.0-92/* /apps/tez/
-
-  cp -r apache-hive-0.13.0.2.1.0.0-92-bin /opt
-  HADOOP_USER_NAME=hive hadoop fs -mkdir -p /user/hive
-  HADOOP_USER_NAME=hive hadoop fs -chmod 755 /user/hive
-  HADOOP_USER_NAME=hive hadoop fs -put /opt/apache-hive-0.13.0.2.1.0.0-92-bin/lib/hive-exec-*.jar /user/hive/hive-exec-0.13.0-SNAPSHOT.jar
-
-  cd Stinger-Preview-Quickstart
-  cp configs/tez-site.xml.physical /etc/hadoop/conf/tez-site.xml
-  cp /etc/hive/conf.server/hive-site.xml /opt/apache-hive-0.13.0.2.1.0.0-92-bin/conf/hive-site.xml
-
-  wget http://private-repo-1.hortonworks.com/HDP-2.1.0.0/repos/centos6/hdp.repo -O /etc/yum.repos.d/stinger.repo
-  yum upgrade hadoop-yarn-resourcemanager
   """
-
   # cmd = """
-    # echo
-    # hostname -f
+  # yum install -y git screen
+  # git clone https://github.com/ahirreddy/benchmark.git
+  # cd benchmark/runner/tez
+
+  # cp -r tez-0.2.0.2.1.0.0-92 /opt
+  # HADOOP_USER_NAME=hdfs hadoop fs -mkdir -p /apps/tez
+  # HADOOP_USER_NAME=hdfs hadoop fs -chmod 755 /apps/tez
+  # HADOOP_USER_NAME=hdfs hadoop fs -copyFromLocal /opt/tez-0.2.0.2.1.0.0-92/* /apps/tez/
+
+  # cp -r apache-hive-0.13.0.2.1.0.0-92-bin /opt
+  # HADOOP_USER_NAME=hive hadoop fs -mkdir -p /user/hive
+  # HADOOP_USER_NAME=hive hadoop fs -chmod 755 /user/hive
+  # HADOOP_USER_NAME=hive hadoop fs -put /opt/apache-hive-0.13.0.2.1.0.0-92-bin/lib/hive-exec-*.jar /user/hive/hive-exec-0.13.0-SNAPSHOT.jar
+
+  # cd Stinger-Preview-Quickstart
+  # cp configs/tez-site.xml.physical /etc/hadoop/conf/tez-site.xml
+  # cp /etc/hive/conf.server/hive-site.xml /opt/apache-hive-0.13.0.2.1.0.0-92-bin/conf/hive-site.xml
+
+  # wget http://private-repo-1.hortonworks.com/HDP-2.1.0.0/repos/centos6/hdp.repo -O /etc/yum.repos.d/stinger.repo
+  # yum upgrade hadoop-yarn-resourcemanager
   # """
   print cmd
 
@@ -624,7 +624,8 @@ def main():
   if opts.hive:
     prepare_hive_dataset(opts)
   if opts.hive_tez:
-    prepare_tez(opts)
+    print "Tez should already be installed by Ambari 1.6. Exiting."
+    # prepare_tez(opts)
   if opts.hive_cdh:
     prepare_hive_cdh_dataset(opts)
 
