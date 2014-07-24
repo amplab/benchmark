@@ -829,7 +829,7 @@ def main():
     return ",".join([str(k) for k in lst])
 
   output = StringIO()
-  outfile = open('results/%s_%s_%s' % (fname, opts.query_num, datetime.datetime.now()), 'w')
+  outfile = open('results_%s_%s_%s' % (fname, opts.query_num, datetime.datetime.now()), 'w')
 
   try:
     if not opts.redshift:
