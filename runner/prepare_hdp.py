@@ -62,7 +62,7 @@ def parse_args():
   # HDP 2.1 ships Hadoop 2.4.0, hence this should be kept as 2.
   parser.add_option("--hadoop-major-version", default="2",
       help="Major version of Hadoop (default: 2)")
-  # RHEL, note this AMI somehow causes only 1 volume to be mounted (m1.large).
+  # ami-a25415cb: Red Hat Enterprise Linux (does not support instance type), note this AMI somehow causes only 1 volume to be mounted (m1.large).
   parser.add_option("-a", "--ami", help="Amazon Machine Image ID to use",
                     default="ami-a25415cb")
   parser.add_option("-v", "--spark-version", default="1.0.0",
@@ -142,6 +142,7 @@ def parse_args():
         print >> stderr, ("ERROR: The environment variable AWS_SECRET_ACCESS_KEY " +
                           "must be set")
         sys.exit(1)
+
   return (opts, action, cluster_name)
 
 
@@ -228,6 +229,11 @@ def launch_cluster(conn, OPTS, cluster_name):
     device.delete_on_termination = True
     block_map["/dev/sdv"] = device
 
+    # assume master and ambari hosts have the same instance type
+    master_type = OPTS.master_instance_type
+    if master_type == "":
+      master_type = OPTS.instance_type
+
     # Launch slaves
     if OPTS.spot_price != None:
       # Launch spot instances with the requested price
@@ -249,7 +255,7 @@ def launch_cluster(conn, OPTS, cluster_name):
             count = 1,
             key_name = OPTS.key_pair,
             security_groups = [ambari_group],
-            instance_type = OPTS.master_instance_type,
+            instance_type = master_type,
             block_device_map = block_map)
         master_reqs = conn.request_spot_instances(
             price = OPTS.spot_price,
@@ -259,7 +265,7 @@ def launch_cluster(conn, OPTS, cluster_name):
             count = 1,
             key_name = OPTS.key_pair,
             security_groups = [master_group],
-            instance_type = OPTS.master_instance_type,
+            instance_type = master_type,
             block_device_map = block_map)
         slave_reqs = conn.request_spot_instances(
             price = OPTS.spot_price,
@@ -344,9 +350,6 @@ def launch_cluster(conn, OPTS, cluster_name):
         i += 1
 
       # Launch masters
-      master_type = OPTS.master_instance_type
-      if master_type == "":
-        master_type = OPTS.instance_type
       if OPTS.zone == 'all':
         OPTS.zone = random.choice(conn.get_all_zones()).name
       master_res = image.run(key_name = OPTS.key_pair,
@@ -359,9 +362,7 @@ def launch_cluster(conn, OPTS, cluster_name):
       master_nodes = master_res.instances
       print "Launched master in %s, regid = %s" % (zone, master_res.id)
 
-      ambari_type = OPTS.master_instance_type
-      if ambari_type == "":
-        ambari_type = OPTS.instance_type
+      ambari_type = master_type
       if OPTS.zone == 'all':
         OPTS.zone = random.choice(conn.get_all_zones()).name
       ambari_res = image.run(key_name = OPTS.key_pair,
