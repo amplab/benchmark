@@ -48,8 +48,8 @@ import boto
 from boto.ec2.blockdevicemapping import BlockDeviceMapping, BlockDeviceType
 from boto import ec2
 
-# Constants
-AMBARI_REPO_URL = """http://public-repo-1.hortonworks.com/ambari/centos6/1.x/updates/1.6.0/ambari.repo"""
+# Ambari Version 1.6.1
+AMBARI_REPO_URL = """http://public-repo-1.hortonworks.com/ambari/centos6/1.x/updates/1.6.1/ambari.repo"""
 
 # Configure and parse our command-line arguments
 def parse_args():
