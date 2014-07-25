@@ -601,7 +601,7 @@ def run_hive_benchmark(opts):
 
   query_file.close()
 
-  print "Copying files to Hive"
+  print "Copying query files to Hive host"
   scp_to(opts.hive_host, opts.hive_identity_file, "root", local_query_file,
       remote_query_file)
   ssh_hive("chmod 775 %s" % remote_query_file)
