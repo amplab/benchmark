@@ -19,15 +19,17 @@
 # limitations under the License.
 #
 
-# TODO: attach multiple EBS volumes during BlockDeviceMapping
+# FIXME: start_all_services() doesn't get called -> drive not mounted?
 
-# TODO: Ambari UI took a long time -> scriptable?
+# TODO: In SUSE AMI ami-1a88bb5f, mkfs.ext4 then mount gives read-only access
+# and no write access. Using xfs as a workaround.
+
+# TODO: future work, check if the configs give best performance
+# TODO: Ambari UI took some time -> scriptable?
   # main things: (1) put all master services into master node (2) enter host
   # names (3) set admin id and passwd (and nagios requires admin email..)
-
 # TODO: action 'login' doesn't work
-
-# TODO(zongheng): ./prepare_hdp should save the hostnames to somewhere instead
+# TODO: ./prepare_hdp should save the hostnames to somewhere instead
 # of only printing them out.
 
 from __future__ import with_statement
@@ -48,8 +50,8 @@ import boto
 from boto.ec2.blockdevicemapping import BlockDeviceMapping, BlockDeviceType
 from boto import ec2
 
-# Ambari Version 1.6.1
-AMBARI_REPO_URL = """http://public-repo-1.hortonworks.com/ambari/centos6/1.x/updates/1.6.1/ambari.repo"""
+# Ambari Version 1.6.1, for SUSE
+AMBARI_REPO_URL = """http://public-repo-1.hortonworks.com/ambari/suse11/1.x/updates/1.6.1/ambari.repo"""
 
 # Configure and parse our command-line arguments
 def parse_args():
@@ -62,9 +64,13 @@ def parse_args():
   # HDP 2.1 ships Hadoop 2.4.0, hence this should be kept as 2.
   parser.add_option("--hadoop-major-version", default="2",
       help="Major version of Hadoop (default: 2)")
-  # ami-a25415cb: Red Hat Enterprise Linux (does not support instance type), note this AMI somehow causes only 1 volume to be mounted (m1.large).
+
+  # ami-a25415cb: Red Hat Enterprise Linux (does not support spot instance),
+  # note this AMI somehow causes only 1 volume to be mounted (m1.large).
+  # SUSE 11 sp3: ami-1a88bb5f for uswest-1, HVM; see http://aws.amazon.com/partners/suse/
   parser.add_option("-a", "--ami", help="Amazon Machine Image ID to use",
-                    default="ami-a25415cb")
+                    default="ami-1a88bb5f")
+
   parser.add_option("-v", "--spark-version", default="1.0.0",
       help="Version of Spark to use: 'X.Y.Z' or a specific git hash")
   parser.add_option("--spark-git-repo",
@@ -237,8 +243,9 @@ def launch_cluster(conn, OPTS, cluster_name):
     # Launch slaves
     if OPTS.spot_price != None:
       # Launch spot instances with the requested price
+      num_spot_instances = OPTS.slaves + 2 # slaves, ambari host, master
       print ("Requesting %d slaves as spot instances with price $%.3f" %
-            (OPTS.slaves, OPTS.spot_price))
+            (num_spot_instances, OPTS.spot_price))
       zones = get_zones(conn, OPTS)
       num_zones = len(zones)
       i = 0
@@ -303,7 +310,7 @@ def launch_cluster(conn, OPTS, cluster_name):
             if i in id_to_req and id_to_req[i].state == "active":
               ambari_instance_ids.append(id_to_req[i].instance_id)
           if len(active_instance_ids) == OPTS.slaves and len(master_instance_ids) == 1 and len(ambari_instance_ids) == 1:
-            print "All %d slaves granted" % OPTS.slaves
+            print "All %d slaves, 1 master, 1 ambari host granted" % OPTS.slaves
             slave_nodes = []
             master_nodes = []
             ambari_nodes = []
@@ -315,8 +322,8 @@ def launch_cluster(conn, OPTS, cluster_name):
               ambari_nodes += r.instances
             break
           else:
-            print "%d of %d slaves granted, waiting longer" % (
-              len(active_instance_ids), OPTS.slaves)
+            print "%d of %d spot instance requests granted, waiting longer" % (
+              len(active_instance_ids), num_spot_instances)
       except Exception as e:
         print e
         print "Canceling spot instance requests"
@@ -417,11 +424,10 @@ def setup_cluster(conn, master_nodes, slave_nodes, ambari_nodes, OPTS, deploy_ss
   ambari = ambari_nodes[0]
   all_nodes = master_nodes + slave_nodes + ambari_nodes
 
+  # NOTE: SUSE AMI doesn't have "ec2-user" and can be logged in directly as root.
   print "Enabling root on all nodes..."
-  OPTS.user = "ec2-user"
-  concurrent_map(enable_root, all_nodes)
-
   OPTS.user = "root"
+  concurrent_map(enable_root, all_nodes)
 
   print "Copying SSH key %s to ambari & master..." % OPTS.identity_file
   concurrent_map(deploy_key, (ambari, master))
@@ -626,34 +632,33 @@ def enable_root(node):
   echo "PermitRootLogin yes" | sudo tee -a /etc/ssh/sshd_config;
   echo "JAVA_HOME=/usr/local" | sudo tee -a /root/.bash_profile;
   echo "SCALA_HOME=/usr/local" | sudo tee -a /root/.bash_profile;
-  sudo cp /home/ec2-user/.ssh/authorized_keys /root/.ssh/authorized_keys;
   sudo /etc/init.d/sshd restart;
   """
-
   ssh(node.public_dns_name, OPTS, cmd)
 
 def configure_node(node):
-  cmd = """
-        yum -y install screen;
-        yum -y install git;
-        sed -e 's/SELINUX=enforcing//g' /etc/selinux/config > /etc/selinux/config;
-        echo "SELINUX=disabled" >> /etc/selinux/config;
-        chkconfig iptables off;
-        chkconfig ip6tables off;
+  # HACKY: "zypper --no-gpg-checks refresh" is necessary to get around
+  # BUG-20060 for Ambari 1.6.1 on SLES. This solves timeout/hanging issue when
+  # installing ambari-agent from the UI.
+  cmd_for_suse = """
+        zypper install -y screen;
+        zypper install -y git;
+        /sbin/rcSuSEfirewall2 stop;
+        zypper --no-gpg-checks refresh;
         shutdown -r now;
         """
+  ssh(node.public_dns_name, OPTS, cmd_for_suse)
 
-  ssh(node.public_dns_name, OPTS, cmd)
 
+# FIXME: does not get called??
 def start_services(node):
-  cmd = """
-  mkfs.ext4 /dev/xvdz;
+  cmd_for_suse = """
+  mkfs.xfs -f /dev/xvdv;
   mkdir /hadoop;
-  mount /dev/xvdz /hadoop;
-  /etc/init.d/ntpd restart;
+  mount /dev/xvdv /hadoop;
+  /etc/init.d/ntp restart;
   """
-
-  return ssh(node.public_dns_name, OPTS, cmd)
+  return ssh(node.public_dns_name, OPTS, cmd_for_suse)
 
 # Deploy private key to ambari and master nodes
 def deploy_key(node):
@@ -670,18 +675,19 @@ def setup_ambari_master(ambari, OPTS):
   #     y: Do you accept the Oracle Binary Code License Agreement [y/n] (y)?
   #     n: Enter advanced database configuration [y/n] (n)?
   ambari_setup_cmd = """yes "" | ambari-server setup"""
-  cmd = """
+
+  # Somehow the nVidia driver repo is causing issues in ambari-agent installation.
+        # rm -rf /etc/zypp/repos.d/nVidia-Driver-SLE11-SP3.repo;
+  cmd_for_suse = """
         wget %s;
-        cp ambari.repo /etc/yum.repos.d;
-        yum -y install epel-release;
-        yum -y repolist;
-        yum -y install ambari-server;
+        cp ambari.repo /etc/zypp/repos.d;
+        zypper install -y ambari-server;
         %s;
         ambari-server start;
         ambari-server status;
         """ % (AMBARI_REPO_URL, ambari_setup_cmd)
 
-  ssh(ambari.public_dns_name, OPTS, cmd, stdin=None)
+  ssh(ambari.public_dns_name, OPTS, cmd_for_suse, stdin=None)
 
 
 # Wait for a whole cluster (masters, slaves and ZooKeeper) to start up
