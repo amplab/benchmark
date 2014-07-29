@@ -391,6 +391,15 @@ def prepare_hive_dataset(opts):
     "STORED AS SEQUENCEFILE LOCATION \\\"/tmp/benchmark/rankings\\\";\"",
   user="hdfs")
 
+  # text file version for the above, for testing
+  # ssh_hive(
+    # "hive -e \"DROP TABLE IF EXISTS rankings; " \
+    # "CREATE EXTERNAL TABLE rankings (pageURL STRING, " \
+    # "pageRank INT, avgDuration INT) ROW FORMAT DELIMITED FIELDS " \
+    # "TERMINATED BY \\\",\\\" " \
+    # "STORED AS TEXTFILE LOCATION \\\"/tmp/benchmark/rankings\\\";\"",
+  # user="hdfs")
+
   ssh_hive(
     "hive -e \"DROP TABLE IF EXISTS uservisits; " \
     "CREATE EXTERNAL TABLE uservisits (sourceIP STRING, "\

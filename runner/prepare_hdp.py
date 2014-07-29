@@ -19,8 +19,6 @@
 # limitations under the License.
 #
 
-# FIXME: start_all_services() doesn't get called -> drive not mounted?
-
 # TODO: In SUSE AMI ami-1a88bb5f, mkfs.ext4 then mount gives read-only access
 # and no write access. Using xfs as a workaround.
 
@@ -50,7 +48,7 @@ import boto
 from boto.ec2.blockdevicemapping import BlockDeviceMapping, BlockDeviceType
 from boto import ec2
 
-# Ambari Version 1.6.1, for SUSE
+# Ambari Version 1.6.1, for SUSE (SLES)
 AMBARI_REPO_URL = """http://public-repo-1.hortonworks.com/ambari/suse11/1.x/updates/1.6.1/ambari.repo"""
 
 # Configure and parse our command-line arguments
@@ -68,6 +66,9 @@ def parse_args():
   # ami-a25415cb: Red Hat Enterprise Linux (does not support spot instance),
   # note this AMI somehow causes only 1 volume to be mounted (m1.large).
   # SUSE 11 sp3: ami-1a88bb5f for uswest-1, HVM; see http://aws.amazon.com/partners/suse/
+  # If prbolems occur w/ SLES (I actually ran into
+  # https://forums.suse.com/showthread.php?5096-error-14090086-SSL-routines-SSL3_GET_SERVER_CERTIFICATE-cert),
+  # try posting on that forum for support.
   parser.add_option("-a", "--ami", help="Amazon Machine Image ID to use",
                     default="ami-1a88bb5f")
 
@@ -440,7 +441,7 @@ def setup_cluster(conn, master_nodes, slave_nodes, ambari_nodes, OPTS, deploy_ss
   print "Setting up ambari node..."
   setup_ambari_master(ambari, OPTS)
 
-  print "Starting All Services..."
+  print "Starting All Services on the following nodes (master and slaves)...:", master_nodes + slave_nodes
   concurrent_map(start_services, master_nodes + slave_nodes)
 
   ssh(ambari.public_dns_name, OPTS, "ambari-server start;")
@@ -626,12 +627,19 @@ def ssh_args(opts):
 def ssh_command(opts):
     return ['ssh'] + ssh_args(opts)
 
-
 def enable_root(node):
+  # NOTE: Java *should* run out-of-the-box. SCALA_HOME might not be needed
+  # here (current plan is to launch Spark cluster using ./spark-ec2).
+
+  # cmd = """
+  # echo "PermitRootLogin yes" | sudo tee -a /etc/ssh/sshd_config;
+  # echo "JAVA_HOME=/usr/local" | sudo tee -a /root/.bash_profile;
+  # echo "SCALA_HOME=/usr/local" | sudo tee -a /root/.bash_profile;
+  # sudo /etc/init.d/sshd restart;
+  # """
+
   cmd = """
   echo "PermitRootLogin yes" | sudo tee -a /etc/ssh/sshd_config;
-  echo "JAVA_HOME=/usr/local" | sudo tee -a /root/.bash_profile;
-  echo "SCALA_HOME=/usr/local" | sudo tee -a /root/.bash_profile;
   sudo /etc/init.d/sshd restart;
   """
   ssh(node.public_dns_name, OPTS, cmd)
@@ -650,13 +658,9 @@ def configure_node(node):
   ssh(node.public_dns_name, OPTS, cmd_for_suse)
 
 
-# FIXME: does not get called??
 def start_services(node):
   cmd_for_suse = """
-  mkfs.xfs -f /dev/xvdv;
-  mkdir /hadoop;
-  mount /dev/xvdv /hadoop;
-  /etc/init.d/ntp restart;
+  mkfs.xfs -f /dev/xvdv && mkdir /hadoop && mount /dev/xvdv /hadoop && /etc/init.d/ntp restart;
   """
   return ssh(node.public_dns_name, OPTS, cmd_for_suse)
 
