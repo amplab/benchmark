@@ -618,9 +618,6 @@ def run_hive_benchmark(opts):
     if opts.clear_buffer_cache:
       print >> stderr, "Clearing Buffer Cache..."
       map(clear_buffer_cache_hive, opts.hive_slaves)
-
-    # print remote_query_file
-
     ssh_hive("%s" % remote_query_file)
     local_results_file = os.path.join(LOCAL_TMP_DIR, "%s_results" % prefix)
     scp_from(opts.hive_host, opts.hive_identity_file, "root",

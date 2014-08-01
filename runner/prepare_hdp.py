@@ -22,11 +22,6 @@
 # TODO: In SUSE AMI ami-1a88bb5f, mkfs.ext4 then mount gives read-only access
 # and no write access. Using xfs as a workaround.
 
-# TODO: future work, check if the configs give best performance
-# TODO: Ambari UI took some time -> scriptable?
-  # main things: (1) put all master services into master node (2) enter host
-  # names (3) set admin id and passwd (and nagios requires admin email..)
-# TODO: action 'login' doesn't work
 # TODO: ./prepare_hdp should save the hostnames to somewhere instead
 # of only printing them out.
 
@@ -48,7 +43,12 @@ import boto
 from boto.ec2.blockdevicemapping import BlockDeviceMapping, BlockDeviceType
 from boto import ec2
 
-# Ambari Version 1.6.1, for SUSE (SLES)
+# By default we use SUSE 11 sp3: ami-1a88bb5f for uswest-1, HVM; see http://aws.amazon.com/partners/suse/
+# which supports spot instances.
+
+# Ambari Version 1.6.1, for SLES 11 sp3.
+# This Ambari installs the following versions of the components:
+#   HDP 2.1;  Hive 0.13;  Tez 0.4.0;  Hadoop 2.4.0.
 AMBARI_REPO_URL = """http://public-repo-1.hortonworks.com/ambari/suse11/1.x/updates/1.6.1/ambari.repo"""
 
 # Configure and parse our command-line arguments
@@ -57,18 +57,10 @@ def parse_args():
       + "\n\n<action> can be: launch, destroy, login, stop, start, get-master",
       add_help_option=False)
 
-  ######## Options that might be of particular interest for harness ########
-
   # HDP 2.1 ships Hadoop 2.4.0, hence this should be kept as 2.
   parser.add_option("--hadoop-major-version", default="2",
       help="Major version of Hadoop (default: 2)")
 
-  # ami-a25415cb: Red Hat Enterprise Linux (does not support spot instance),
-  # note this AMI somehow causes only 1 volume to be mounted (m1.large).
-  # SUSE 11 sp3: ami-1a88bb5f for uswest-1, HVM; see http://aws.amazon.com/partners/suse/
-  # If prbolems occur w/ SLES (I actually ran into
-  # https://forums.suse.com/showthread.php?5096-error-14090086-SSL-routines-SSL3_GET_SERVER_CERTIFICATE-cert),
-  # try posting on that forum for support.
   parser.add_option("-a", "--ami", help="Amazon Machine Image ID to use",
                     default="ami-1a88bb5f")
 
@@ -77,8 +69,6 @@ def parse_args():
   parser.add_option("--spark-git-repo",
       default="https://github.com/apache/spark",
       help="Github repo from which to checkout supplied commit hash")
-
-  ######## Other options ################################################
 
   parser.add_option("-h", "--help", action="help",
                     help="Show this help message and exit")
@@ -395,13 +385,10 @@ def get_existing_cluster(conn, OPTS, cluster_name, die_on_error=True):
   master_nodes = []
   slave_nodes = []
   ambari_nodes = []
-  # print "reservations: ", str(reservations)
   for res in reservations:
     active = [i for i in res.instances if is_active(i)]
     if len(active) > 0:
-      # print "found active instances", active
       group_names = [g.name for g in res.groups]
-      # print group_names
       if group_names == [cluster_name + "-master"]:
         master_nodes += res.instances
       elif group_names == [cluster_name + "-slaves"]:
@@ -446,19 +433,6 @@ def setup_cluster(conn, master_nodes, slave_nodes, ambari_nodes, OPTS, deploy_ss
 
   ssh(ambari.public_dns_name, OPTS, "ambari-server start;")
 
-  # modules = ['spark', 'spark-standalone']
-  # print "Setting up Spark on master and slaves..."
-  # # NOTE: We should clone the repository before running deploy_files to
-  # # prevent ec2-variables.sh from being overwritten
-  # ssh(master.public_dns_name,
-      # OPTS,
-      # "rm -rf spark-ec2 && git clone https://github.com/concretevitamin/spark-ec2.git -b v3-sparksql-harness")
-
-  # print "Deploying files to master..."
-  # deploy_files(conn, "deploy.generic.hdp", OPTS, master_nodes, slave_nodes, modules)
-  # print "Running setup on master..."
-  # setup_spark_cluster(master, OPTS)
-
   print "Ambari: %s" % ambari.public_dns_name
   print "Master: %s" % master.public_dns_name
   for slave in slave_nodes:
@@ -470,174 +444,9 @@ def setup_cluster(conn, master_nodes, slave_nodes, ambari_nodes, OPTS, deploy_ss
     print "\t", slave.private_dns_name
 
 
-def get_spark_shark_version(opts):
-    spark_shark_map = {
-        "0.7.3": "0.7.1", "0.8.0": "0.8.0", "0.8.1": "0.8.1", "0.9.0": "0.9.0", "0.9.1": "0.9.1",
-        "1.0.0": "1.0.0"
-    }
-    version = opts.spark_version.replace("v", "")
-    if version not in spark_shark_map:
-        print >> stderr, "Don't know about Spark version: %s" % version
-        sys.exit(1)
-    return (version, spark_shark_map[version])
-
-
-# Get number of local disks available for a given EC2 instance type.
-def get_num_disks(instance_type):
-    # From http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/InstanceStorage.html
-    # Updated 2014-6-20
-    disks_by_instance = {
-        "m1.small":    1,
-        "m1.medium":   1,
-        "m1.large":    2,
-        "m1.xlarge":   4,
-        "t1.micro":    1,
-        "c1.medium":   1,
-        "c1.xlarge":   4,
-        "m2.xlarge":   1,
-        "m2.2xlarge":  1,
-        "m2.4xlarge":  2,
-        "cc1.4xlarge": 2,
-        "cc2.8xlarge": 4,
-        "cg1.4xlarge": 2,
-        "hs1.8xlarge": 24,
-        "cr1.8xlarge": 2,
-        "hi1.4xlarge": 2,
-        "m3.medium":   1,
-        "m3.large":    1,
-        "m3.xlarge":   2,
-        "m3.2xlarge":  2,
-        "i2.xlarge":   1,
-        "i2.2xlarge":  2,
-        "i2.4xlarge":  4,
-        "i2.8xlarge":  8,
-        "c3.large":    2,
-        "c3.xlarge":   2,
-        "c3.2xlarge":  2,
-        "c3.4xlarge":  2,
-        "c3.8xlarge":  2,
-        "r3.large":    1,
-        "r3.xlarge":   1,
-        "r3.2xlarge":  1,
-        "r3.4xlarge":  1,
-        "r3.8xlarge":  2,
-        "g2.2xlarge":  1,
-        "t1.micro":    0
-    }
-    if instance_type in disks_by_instance:
-        return disks_by_instance[instance_type]
-    else:
-        print >> stderr, ("WARNING: Don't know number of disks on instance type %s; assuming 1"
-                          % instance_type)
-        return 1
-
-
-# Deploy the configuration file templates in a given local directory to
-# a cluster, filling in any template parameters with information about the
-# cluster (e.g. lists of masters and slaves). Files are only deployed to
-# the first master instance in the cluster, and we expect the setup
-# script to be run on that instance to copy them to other nodes.
-def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, modules):
-    active_master = master_nodes[0].public_dns_name
-
-    num_disks = get_num_disks(opts.instance_type)
-    # hdfs_data_dirs = "/mnt/ephemeral-hdfs/data"
-    # mapred_local_dirs = "/mnt/hadoop/mrlocal"
-    spark_local_dirs = "/mnt/spark" # FIXME: correct dir??
-    if num_disks > 1:
-        for i in range(2, num_disks + 1):
-            # hdfs_data_dirs += ",/mnt%d/ephemeral-hdfs/data" % i
-            # mapred_local_dirs += ",/mnt%d/hadoop/mrlocal" % i
-            spark_local_dirs += ",/mnt%d/spark" % i # FIXME: correct dir??
-
-    cluster_url = "%s:7077" % active_master
-
-    if "." in opts.spark_version:
-        # Pre-built spark & shark deploy
-        (spark_v, shark_v) = get_spark_shark_version(opts)
-    else:
-        # Spark-only custom deploy
-        spark_v = "%s|%s" % (opts.spark_git_repo, opts.spark_version)
-        shark_v = ""
-        modules = filter(lambda x: x != "shark", modules)
-
-    template_vars = {
-        "master_list": '\n'.join([i.public_dns_name for i in master_nodes]),
-        "active_master": active_master,
-        "slave_list": '\n'.join([i.public_dns_name for i in slave_nodes]),
-        "cluster_url": cluster_url,
-        # "hdfs_data_dirs": hdfs_data_dirs,
-        # "mapred_local_dirs": mapred_local_dirs,
-        "spark_local_dirs": spark_local_dirs,
-        "swap": str(opts.swap),  # FIXME: do we need this - is swap space already set up?
-        "modules": '\n'.join(modules),
-        "spark_version": spark_v,
-        "shark_version": shark_v,
-        "hadoop_major_version": opts.hadoop_major_version,
-        "spark_worker_instances": "%d" % opts.worker_instances,
-        "spark_master_opts": opts.master_opts
-    }
-
-    # Create a temp directory in which we will place all the files to be
-    # deployed after we substitue template parameters in them
-    tmp_dir = tempfile.mkdtemp()
-    for path, dirs, files in os.walk(root_dir):
-        if path.find(".svn") == -1:
-            dest_dir = os.path.join('/', path[len(root_dir):])
-            local_dir = tmp_dir + dest_dir
-            if not os.path.exists(local_dir):
-                os.makedirs(local_dir)
-            for filename in files:
-                if filename[0] not in '#.~' and filename[-1] != '~':
-                    dest_file = os.path.join(dest_dir, filename)
-                    local_file = tmp_dir + dest_file
-                    with open(os.path.join(path, filename)) as src:
-                        with open(local_file, "w") as dest:
-                            text = src.read()
-                            for key in template_vars:
-                                text = text.replace("{{" + key + "}}", template_vars[key])
-                            dest.write(text)
-                            dest.close()
-    # rsync the whole directory over to the master machine
-    command = [
-        'rsync', '-rv',
-        '-e', stringify_command(ssh_command(opts)),
-        "%s/" % tmp_dir,
-        "%s@%s:/" % (opts.user, active_master)
-    ]
-    subprocess.check_call(command)
-    # Remove the temp directory we created above
-    shutil.rmtree(tmp_dir)
-
-
-def stringify_command(parts):
-    if isinstance(parts, str):
-        return parts
-    else:
-        return ' '.join(map(pipes.quote, parts))
-
-
-def ssh_args(opts):
-    parts = ['-o', 'StrictHostKeyChecking=no']
-    if opts.identity_file is not None:
-        parts += ['-i', opts.identity_file]
-    return parts
-
-
-def ssh_command(opts):
-    return ['ssh'] + ssh_args(opts)
-
 def enable_root(node):
   # NOTE: Java *should* run out-of-the-box. SCALA_HOME might not be needed
   # here (current plan is to launch Spark cluster using ./spark-ec2).
-
-  # cmd = """
-  # echo "PermitRootLogin yes" | sudo tee -a /etc/ssh/sshd_config;
-  # echo "JAVA_HOME=/usr/local" | sudo tee -a /root/.bash_profile;
-  # echo "SCALA_HOME=/usr/local" | sudo tee -a /root/.bash_profile;
-  # sudo /etc/init.d/sshd restart;
-  # """
-
   cmd = """
   echo "PermitRootLogin yes" | sudo tee -a /etc/ssh/sshd_config;
   sudo /etc/init.d/sshd restart;
@@ -680,8 +489,6 @@ def setup_ambari_master(ambari, OPTS):
   #     n: Enter advanced database configuration [y/n] (n)?
   ambari_setup_cmd = """yes "" | ambari-server setup"""
 
-  # Somehow the nVidia driver repo is causing issues in ambari-agent installation.
-        # rm -rf /etc/zypp/repos.d/nVidia-Driver-SLE11-SP3.repo;
   cmd_for_suse = """
         wget %s;
         cp ambari.repo /etc/zypp/repos.d;
