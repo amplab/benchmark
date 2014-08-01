@@ -19,6 +19,12 @@
 # limitations under the License.
 #
 
+# TODO: In SUSE AMI ami-1a88bb5f, mkfs.ext4 then mount gives read-only access
+# and no write access. Using xfs as a workaround.
+
+# TODO: ./prepare_hdp should save the hostnames to somewhere instead
+# of only printing them out.
+
 from __future__ import with_statement
 
 import logging
@@ -37,11 +43,33 @@ import boto
 from boto.ec2.blockdevicemapping import BlockDeviceMapping, BlockDeviceType
 from boto import ec2
 
+# By default we use SUSE 11 sp3: ami-1a88bb5f for uswest-1, HVM; see http://aws.amazon.com/partners/suse/
+# which supports spot instances.
+
+# Ambari Version 1.6.1, for SLES 11 sp3.
+# This Ambari installs the following versions of the components:
+#   HDP 2.1;  Hive 0.13;  Tez 0.4.0;  Hadoop 2.4.0.
+AMBARI_REPO_URL = """http://public-repo-1.hortonworks.com/ambari/suse11/1.x/updates/1.6.1/ambari.repo"""
+
 # Configure and parse our command-line arguments
 def parse_args():
   parser = OptionParser(usage="spark-ec2 [options] <action> <cluster_name>"
       + "\n\n<action> can be: launch, destroy, login, stop, start, get-master",
       add_help_option=False)
+
+  # HDP 2.1 ships Hadoop 2.4.0, hence this should be kept as 2.
+  parser.add_option("--hadoop-major-version", default="2",
+      help="Major version of Hadoop (default: 2)")
+
+  parser.add_option("-a", "--ami", help="Amazon Machine Image ID to use",
+                    default="ami-1a88bb5f")
+
+  parser.add_option("-v", "--spark-version", default="1.0.0",
+      help="Version of Spark to use: 'X.Y.Z' or a specific git hash")
+  parser.add_option("--spark-git-repo",
+      default="https://github.com/apache/spark",
+      help="Github repo from which to checkout supplied commit hash")
+
   parser.add_option("-h", "--help", action="help",
                     help="Show this help message and exit")
   parser.add_option("-s", "--slaves", type="int", default=1,
@@ -63,16 +91,7 @@ def parse_args():
       help="Availability zone to launch instances in, or 'all' to spread " +
            "slaves across multiple (an additional $0.01/Gb for bandwidth" +
            "between zones applies)")
-  parser.add_option("-a", "--ami", help="Amazon Machine Image ID to use",
-                    default="ami-a25415cb")
-  parser.add_option("-v", "--spark-version", default="0.8.0",
-      help="Version of Spark to use: 'X.Y.Z' or a specific git hash")
-  parser.add_option("--spark-git-repo", 
-      default="https://github.com/mesos/spark", 
-      help="Github repo from which to checkout supplied commit hash")
-  parser.add_option("--hadoop-major-version", default="1",
-      help="Major version of Hadoop (default: 1)")
-  parser.add_option("-D", metavar="[ADDRESS:]PORT", dest="proxy_port", 
+  parser.add_option("-D", metavar="[ADDRESS:]PORT", dest="proxy_port",
       help="Use SSH dynamic port forwarding to create a SOCKS proxy at " +
             "the given local address (for use with login)")
   parser.add_option("--resume", action="store_true", default=False,
@@ -106,7 +125,7 @@ def parse_args():
     print >> stderr, ("ERROR: The -i or --identity-file argument is " +
                       "required for " + action)
     sys.exit(1)
-  
+
   # Boto config check
   # http://boto.cloudhackers.com/en/latest/boto_config_tut.html
   home_dir = os.getenv('HOME')
@@ -120,6 +139,7 @@ def parse_args():
         print >> stderr, ("ERROR: The environment variable AWS_SECRET_ACCESS_KEY " +
                           "must be set")
         sys.exit(1)
+
   return (opts, action, cluster_name)
 
 
@@ -206,11 +226,17 @@ def launch_cluster(conn, OPTS, cluster_name):
     device.delete_on_termination = True
     block_map["/dev/sdv"] = device
 
+    # assume master and ambari hosts have the same instance type
+    master_type = OPTS.master_instance_type
+    if master_type == "":
+      master_type = OPTS.instance_type
+
     # Launch slaves
     if OPTS.spot_price != None:
       # Launch spot instances with the requested price
+      num_spot_instances = OPTS.slaves + 2 # slaves, ambari host, master
       print ("Requesting %d slaves as spot instances with price $%.3f" %
-            (OPTS.slaves, OPTS.spot_price))
+            (num_spot_instances, OPTS.spot_price))
       zones = get_zones(conn, OPTS)
       num_zones = len(zones)
       i = 0
@@ -227,7 +253,7 @@ def launch_cluster(conn, OPTS, cluster_name):
             count = 1,
             key_name = OPTS.key_pair,
             security_groups = [ambari_group],
-            instance_type = OPTS.master_instance_type,
+            instance_type = master_type,
             block_device_map = block_map)
         master_reqs = conn.request_spot_instances(
             price = OPTS.spot_price,
@@ -237,7 +263,7 @@ def launch_cluster(conn, OPTS, cluster_name):
             count = 1,
             key_name = OPTS.key_pair,
             security_groups = [master_group],
-            instance_type = OPTS.master_instance_type,
+            instance_type = master_type,
             block_device_map = block_map)
         slave_reqs = conn.request_spot_instances(
             price = OPTS.spot_price,
@@ -275,7 +301,7 @@ def launch_cluster(conn, OPTS, cluster_name):
             if i in id_to_req and id_to_req[i].state == "active":
               ambari_instance_ids.append(id_to_req[i].instance_id)
           if len(active_instance_ids) == OPTS.slaves and len(master_instance_ids) == 1 and len(ambari_instance_ids) == 1:
-            print "All %d slaves granted" % OPTS.slaves
+            print "All %d slaves, 1 master, 1 ambari host granted" % OPTS.slaves
             slave_nodes = []
             master_nodes = []
             ambari_nodes = []
@@ -287,8 +313,8 @@ def launch_cluster(conn, OPTS, cluster_name):
               ambari_nodes += r.instances
             break
           else:
-            print "%d of %d slaves granted, waiting longer" % (
-              len(active_instance_ids), OPTS.slaves)
+            print "%d of %d spot instance requests granted, waiting longer" % (
+              len(active_instance_ids), num_spot_instances)
       except Exception as e:
         print e
         print "Canceling spot instance requests"
@@ -322,9 +348,6 @@ def launch_cluster(conn, OPTS, cluster_name):
         i += 1
 
       # Launch masters
-      master_type = OPTS.master_instance_type
-      if master_type == "":
-        master_type = OPTS.instance_type
       if OPTS.zone == 'all':
         OPTS.zone = random.choice(conn.get_all_zones()).name
       master_res = image.run(key_name = OPTS.key_pair,
@@ -337,9 +360,7 @@ def launch_cluster(conn, OPTS, cluster_name):
       master_nodes = master_res.instances
       print "Launched master in %s, regid = %s" % (zone, master_res.id)
 
-      ambari_type = OPTS.master_instance_type
-      if ambari_type == "":
-        ambari_type = OPTS.instance_type
+      ambari_type = master_type
       if OPTS.zone == 'all':
         OPTS.zone = random.choice(conn.get_all_zones()).name
       ambari_res = image.run(key_name = OPTS.key_pair,
@@ -391,11 +412,10 @@ def setup_cluster(conn, master_nodes, slave_nodes, ambari_nodes, OPTS, deploy_ss
   ambari = ambari_nodes[0]
   all_nodes = master_nodes + slave_nodes + ambari_nodes
 
+  # NOTE: SUSE AMI doesn't have "ec2-user" and can be logged in directly as root.
   print "Enabling root on all nodes..."
-  OPTS.user = "ec2-user"
-  concurrent_map(enable_root, all_nodes)
-
   OPTS.user = "root"
+  concurrent_map(enable_root, all_nodes)
 
   print "Copying SSH key %s to ambari & master..." % OPTS.identity_file
   concurrent_map(deploy_key, (ambari, master))
@@ -408,15 +428,8 @@ def setup_cluster(conn, master_nodes, slave_nodes, ambari_nodes, OPTS, deploy_ss
   print "Setting up ambari node..."
   setup_ambari_master(ambari, OPTS)
 
-  print "Starting All Services..."
+  print "Starting All Services on the following nodes (master and slaves)...:", master_nodes + slave_nodes
   concurrent_map(start_services, master_nodes + slave_nodes)
-
-  args = {
-    'runner' : '/Users/ahirreddy/Work/benchmark/spark-0.8.0-incubating/ec2/spark-ec2',
-    'keyname' : OPTS.key_pair,
-    'idfile' : OPTS.identity_file,
-    'cluster' : cluster_name,
-  }
 
   ssh(ambari.public_dns_name, OPTS, "ambari-server start;")
 
@@ -428,40 +441,37 @@ def setup_cluster(conn, master_nodes, slave_nodes, ambari_nodes, OPTS, deploy_ss
   print "Master: %s" % master.private_dns_name
   print "Slaves:"
   for slave in slave_nodes:
-    print slave.private_dns_name
+    print "\t", slave.private_dns_name
+
 
 def enable_root(node):
+  # NOTE: Java *should* run out-of-the-box. SCALA_HOME might not be needed
+  # here (current plan is to launch Spark cluster using ./spark-ec2).
   cmd = """
   echo "PermitRootLogin yes" | sudo tee -a /etc/ssh/sshd_config;
-  echo "JAVA_HOME=/usr/local" | sudo tee -a /root/.bash_profile;
-  echo "SCALA_HOME=/usr/local" | sudo tee -a /root/.bash_profile;
-  sudo cp /home/ec2-user/.ssh/authorized_keys /root/.ssh/authorized_keys;
   sudo /etc/init.d/sshd restart;
   """
-
   ssh(node.public_dns_name, OPTS, cmd)
 
 def configure_node(node):
-  cmd = """
-        yum -y install git;
-        sed -e 's/SELINUX=enforcing//g' /etc/selinux/config > /etc/selinux/config;
-        echo "SELINUX=disabled" >> /etc/selinux/config;
-        chkconfig iptables off;
-        chkconfig ip6tables off;
+  # HACKY: "zypper --no-gpg-checks refresh" is necessary to get around
+  # BUG-20060 for Ambari 1.6.1 on SLES. This solves timeout/hanging issue when
+  # installing ambari-agent from the UI.
+  cmd_for_suse = """
+        zypper install -y screen;
+        zypper install -y git;
+        /sbin/rcSuSEfirewall2 stop;
+        zypper --no-gpg-checks refresh;
         shutdown -r now;
         """
+  ssh(node.public_dns_name, OPTS, cmd_for_suse)
 
-  ssh(node.public_dns_name, OPTS, cmd)
 
 def start_services(node):
-  cmd = """
-  mkfs.ext4 /dev/xvdz;
-  mkdir /hadoop;
-  mount /dev/xvdz /hadoop;
-  /etc/init.d/ntpd restart;
+  cmd_for_suse = """
+  mkfs.xfs -f /dev/xvdv && mkdir /hadoop && mount /dev/xvdv /hadoop && /etc/init.d/ntp restart;
   """
-
-  return ssh(node.public_dns_name, OPTS, cmd)
+  return ssh(node.public_dns_name, OPTS, cmd_for_suse)
 
 # Deploy private key to ambari and master nodes
 def deploy_key(node):
@@ -471,20 +481,24 @@ def deploy_key(node):
     ssh(node.public_dns_name, OPTS, 'chmod 600 ~/.ssh/id_rsa')
 
 # Setup the Ambari Master and start the ambari server
-# TODO: Find a way to completely automate, currently user has to interact
-# with install process
 def setup_ambari_master(ambari, OPTS):
-  cmd = """
-        wget http://public-repo-1.hortonworks.com/ambari/centos6/1.x/updates/1.4.1.25/ambari.repo;
-        cp ambari.repo /etc/yum.repos.d;
-        yum -y install epel-release;
-        yum -y repolist;
-        yum -y install ambari-server;
-        ambari-server setup;
+  # Hack: attempt to skip user interaction in the setup process by using the default options.
+  # Works the first time this setup command is called on a node.
+  #     n: customize user account for ambari-server daemon [y/n] (n)?
+  #     y: Do you accept the Oracle Binary Code License Agreement [y/n] (y)?
+  #     n: Enter advanced database configuration [y/n] (n)?
+  ambari_setup_cmd = """yes "" | ambari-server setup"""
+
+  cmd_for_suse = """
+        wget %s;
+        cp ambari.repo /etc/zypp/repos.d;
+        zypper install -y ambari-server;
+        %s;
         ambari-server start;
         ambari-server status;
-        """
-  ssh(ambari.public_dns_name, OPTS, cmd, stdin=None)
+        """ % (AMBARI_REPO_URL, ambari_setup_cmd)
+
+  ssh(ambari.public_dns_name, OPTS, cmd_for_suse, stdin=None)
 
 
 # Wait for a whole cluster (masters, slaves and ZooKeeper) to start up
@@ -597,7 +611,36 @@ def main():
       print "Terminating slaves..."
       for inst in slave_nodes:
         inst.terminate()
-
+  elif action == "stop":
+      response = raw_input(
+          "Are you sure you want to stop the cluster " +
+          cluster_name + "?\nDATA ON EPHEMERAL DISKS WILL BE LOST, " +
+          "BUT THE CLUSTER WILL KEEP USING SPACE ON\n" +
+          "AMAZON EBS IF IT IS EBS-BACKED!!\n" +
+          "All data on spot-instance slaves will be lost.\n" +
+          "Stop cluster " + cluster_name + " (y/N): ")
+      if response == "y":
+          (master_nodes, slave_nodes, ambari_nodes) = get_existing_cluster(
+              conn, OPTS, cluster_name, die_on_error=False)
+          # print "GOT NODES: " + str((master_nodes, slave_nodes, ambari_nodes))
+          print "Stopping master..."
+          for inst in master_nodes:
+              if inst.state not in ["shutting-down", "terminated"]:
+                  inst.stop()
+          print "Stopping slaves..."
+          for inst in slave_nodes:
+              if inst.state not in ["shutting-down", "terminated"]:
+                  if inst.spot_instance_request_id:
+                      inst.terminate()
+                  else:
+                      inst.stop()
+          print "Stopping ambari..."
+          for inst in slave_nodes:
+              if inst.state not in ["shutting-down", "terminated"]:
+                  if inst.spot_instance_request_id:
+                      inst.terminate()
+                  else:
+                      inst.stop()
 
 def concurrent_map(func, data):
     """

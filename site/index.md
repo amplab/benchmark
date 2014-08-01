@@ -640,9 +640,9 @@ This command will launch and configure the specified number of slaves in additio
 Once complete, it will report both the internal and external hostnames of each node.
 
   1. SSH into the Ambari node as root and run `ambari-server start`
-  2. Visit port 8080 of the Ambari node and login as admin to begin cluster setup.
+  2. Visit port 8080 of the Ambari node and login (by default, both username and password are `admin`) to begin cluster setup.
   3. When prompted to enter hosts, you must use the interal EC2 hostnames.
-  4. Install all services and take care to install all master services on the node designated as master by the setup script.
+  4. Install all services, and take care to install all master services on the node designated as master (not the Ambari host) by the setup script.
   5. This installation should take 10-20 minutes. Load the benchmark data once it is complete.
 
 To install Tez on this cluster, use the following command. It will remove the ability to use normal Hive.
@@ -751,6 +751,15 @@ $> ./prepare-benchmark.sh
 --scale-factor=5
 {% endhighlight %}
 </td><td>
+{% highlight bash %}
+$> ./run-query.sh
+--hive
+[--tez]
+--hive-host [MASTER REPORTED BY SETUP SCRIPT]
+--hive-slaves [COMMA SEPARATED LIST OF SLAVES]
+--hive-identity-file [SSH PRIVATE KEY]
+--query-num=[QUERY NUM]
+{% endhighlight %}
 </td><td>
 </td></tr>
 

@@ -1,11 +1,11 @@
 # Copyright 2013 The Regents of The University California
-# 
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-# 
+#
 #   http://www.apache.org/licenses/LICENSE-2.0
-# 
+#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -49,16 +49,16 @@ QUERY_2a_HQL = "SELECT SUBSTR(sourceIP, 1, 8), SUM(adRevenue) FROM " \
 QUERY_2b_HQL = QUERY_2a_HQL.replace("8", "10")
 QUERY_2c_HQL = QUERY_2a_HQL.replace("8", "12")
 
-QUERY_3a_HQL = """SELECT sourceIP, 
-                          sum(adRevenue) as totalRevenue, 
-                          avg(pageRank) as pageRank 
+QUERY_3a_HQL = """SELECT sourceIP,
+                          sum(adRevenue) as totalRevenue,
+                          avg(pageRank) as pageRank
                    FROM
                      rankings R JOIN
-                     (SELECT sourceIP, destURL, adRevenue 
-                      FROM uservisits UV 
+                     (SELECT sourceIP, destURL, adRevenue
+                      FROM uservisits UV
                       WHERE UV.visitDate > "1980-01-01"
-                      AND UV.visitDate < "1980-04-01") 
-                      NUV ON (R.pageURL = NUV.destURL) 
+                      AND UV.visitDate < "1980-04-01")
+                      NUV ON (R.pageURL = NUV.destURL)
                    GROUP BY sourceIP
                    ORDER BY totalRevenue DESC
                    LIMIT 1"""
@@ -67,24 +67,24 @@ QUERY_3b_HQL = QUERY_3a_HQL.replace("1980-04-01", "1983-01-01")
 QUERY_3c_HQL = QUERY_3a_HQL.replace("1980-04-01", "2010-01-01")
 
 QUERY_4_HQL = """DROP TABLE IF EXISTS url_counts_partial;
-                 CREATE TABLE url_counts_partial AS 
-                   SELECT TRANSFORM (line) 
-                   USING "python /root/url_count.py" as (sourcePage, 
+                 CREATE TABLE url_counts_partial AS
+                   SELECT TRANSFORM (line)
+                   USING "python /root/url_count.py" as (sourcePage,
                      destPage, count) from documents;
                  DROP TABLE IF EXISTS url_counts_total;
-                 CREATE TABLE url_counts_total AS 
-                   SELECT SUM(count) AS totalCount, destpage 
+                 CREATE TABLE url_counts_total AS
+                   SELECT SUM(count) AS totalCount, destpage
                    FROM url_counts_partial GROUP BY destpage;"""
 QUERY_4_HQL = " ".join(QUERY_4_HQL.replace("\n", "").split())
 
 QUERY_4_HQL_HIVE_UDF = """DROP TABLE IF EXISTS url_counts_partial;
-                 CREATE TABLE url_counts_partial AS 
-                   SELECT TRANSFORM (line) 
-                   USING "python /tmp/url_count.py" as (sourcePage, 
+                 CREATE TABLE url_counts_partial AS
+                   SELECT TRANSFORM (line)
+                   USING "python /tmp/url_count.py" as (sourcePage,
                      destPage, count) from documents;
                  DROP TABLE IF EXISTS url_counts_total;
-                 CREATE TABLE url_counts_total AS 
-                   SELECT SUM(count) AS totalCount, destpage 
+                 CREATE TABLE url_counts_total AS
+                   SELECT SUM(count) AS totalCount, destpage
                    FROM url_counts_partial GROUP BY destpage;"""
 QUERY_4_HQL_HIVE_UDF = " ".join(QUERY_4_HQL_HIVE_UDF.replace("\n", "").split())
 
@@ -107,7 +107,7 @@ QUERY_3a_SQL = """SELECT sourceIP, totalRevenue, avgPageRank
                               SUM(adRevenue) as totalRevenue
                       FROM Rankings AS R, UserVisits AS UV
                       WHERE R.pageURL = UV.destinationURL
-                      AND UV.visitDate 
+                      AND UV.visitDate
                         BETWEEN Date('1980-01-01') AND Date('1980-04-01')
                       GROUP BY UV.sourceIP)
                    ORDER BY totalRevenue DESC LIMIT 1""".replace("\n", "")
@@ -132,23 +132,23 @@ TEZ_MAP =    {'1a':(count(QUERY_1a_HQL),), '1b':(count(QUERY_1b_HQL),), '1c': (c
               '3a':(count(QUERY_3a_HQL),), '3b':(count(QUERY_3b_HQL),), '3c': (count(QUERY_3c_HQL),)}
 
 QUERY_MAP = {
-             '1a':  (create_as(QUERY_1a_HQL), insert_into(QUERY_1a_HQL), 
+             '1a':  (create_as(QUERY_1a_HQL), insert_into(QUERY_1a_HQL),
                      create_as(QUERY_1a_SQL)),
-             '1b':  (create_as(QUERY_1b_HQL), insert_into(QUERY_1b_HQL), 
+             '1b':  (create_as(QUERY_1b_HQL), insert_into(QUERY_1b_HQL),
                      create_as(QUERY_1b_SQL)),
-             '1c':  (create_as(QUERY_1c_HQL), insert_into(QUERY_1c_HQL), 
+             '1c':  (create_as(QUERY_1c_HQL), insert_into(QUERY_1c_HQL),
                      create_as(QUERY_1c_SQL)),
-             '2a': (create_as(QUERY_2a_HQL), insert_into(QUERY_2a_HQL), 
+             '2a': (create_as(QUERY_2a_HQL), insert_into(QUERY_2a_HQL),
                     create_as(QUERY_2a_SQL)),
-             '2b': (create_as(QUERY_2b_HQL), insert_into(QUERY_2b_HQL), 
+             '2b': (create_as(QUERY_2b_HQL), insert_into(QUERY_2b_HQL),
                     create_as(QUERY_2b_SQL)),
-             '2c': (create_as(QUERY_2c_HQL), insert_into(QUERY_2c_HQL), 
+             '2c': (create_as(QUERY_2c_HQL), insert_into(QUERY_2c_HQL),
                     create_as(QUERY_2c_SQL)),
-             '3a': (create_as(QUERY_3a_HQL), insert_into(QUERY_3a_HQL), 
+             '3a': (create_as(QUERY_3a_HQL), insert_into(QUERY_3a_HQL),
                     create_as(QUERY_3a_SQL)),
-             '3b': (create_as(QUERY_3b_HQL), insert_into(QUERY_3b_HQL), 
+             '3b': (create_as(QUERY_3b_HQL), insert_into(QUERY_3b_HQL),
                     create_as(QUERY_3b_SQL)),
-             '3c': (create_as(QUERY_3c_HQL), insert_into(QUERY_3c_HQL), 
+             '3c': (create_as(QUERY_3c_HQL), insert_into(QUERY_3c_HQL),
                     create_as(QUERY_3c_SQL)),
              '4':  (QUERY_4_HQL, None, None),
              '4_HIVE':  (QUERY_4_HQL_HIVE_UDF, None, None)}
@@ -182,11 +182,11 @@ def parse_args():
   parser.add_option("--hive-cdh", action="store_true", default=False,
       help="Hive on CDH cluster")
 
-  parser.add_option("-g", "--shark-no-cache", action="store_true", 
+  parser.add_option("-g", "--shark-no-cache", action="store_true",
       default=False, help="Disable caching in Shark")
   parser.add_option("--impala-use-hive", action="store_true",
-      default=False, help="Use Hive for query executio on Impala nodes") 
-  parser.add_option("-t", "--reduce-tasks", type="int", default=150, 
+      default=False, help="Use Hive for query executio on Impala nodes")
+  parser.add_option("-t", "--reduce-tasks", type="int", default=150,
       help="Number of reduce tasks in Shark")
   parser.add_option("-z", "--clear-buffer-cache", action="store_true",
       default=False, help="Clear disk buffer cache between query runs")
@@ -229,17 +229,17 @@ def parse_args():
     parser.print_help()
     sys.exit(1)
 
-  if opts.impala and (opts.impala_identity_file is None or 
+  if opts.impala and (opts.impala_identity_file is None or
                       opts.impala_hosts is None):
     print >> stderr, "Impala requires identity file and hostname"
     sys.exit(1)
-  
-  if opts.shark and (opts.shark_identity_file is None or 
+
+  if opts.shark and (opts.shark_identity_file is None or
                      opts.shark_host is None):
     print >> stderr, \
         "Shark requires identity file and hostname"
     sys.exit(1)
-  
+
   if opts.redshift and (opts.redshift_username is None or
                         opts.redshift_password is None or
                         opts.redshift_host is None or
@@ -252,6 +252,7 @@ def parse_args():
     hosts = opts.impala_hosts.split(",")
     print >> stderr, "Impala hosts:\n%s" % "\n".join(hosts)
     opts.impala_hosts = hosts
+
   if opts.hive or opts.hive_cdh:
     opts.hive_slaves = opts.hive_slaves.split(",")
     print >> stderr, "Hive slaves:\n%s" % "\n".join(opts.hive_slaves)
@@ -259,7 +260,7 @@ def parse_args():
   if opts.query_num not in QUERY_MAP:
     print >> stderr, "Unknown query number: %s" % opts.query_num
     sys.exit(1)
-    
+
   return opts
 
 # Run a command on a host through ssh, throwing an exception if ssh fails
@@ -422,7 +423,7 @@ def run_shark_benchmark(opts):
 
 def run_impala_benchmark(opts):
   impala_host = opts.impala_hosts[0]
-  def ssh_impala(command): 
+  def ssh_impala(command):
     ssh(impala_host, "ubuntu", opts.impala_identity_file, command)
 
   def clear_buffer_cache_impala(host):
@@ -463,13 +464,13 @@ def run_impala_benchmark(opts):
   query_file.write(
       "%s '%s%s' > %s 2>&1;\n" % (runner, connect_stmt, query, remote_tmp_file))
   query_file.write("cat %s |egrep 'Inserted|Time' |grep -v MapReduce >> %s;\n" % (
-      remote_tmp_file, remote_result_file)) 
+      remote_tmp_file, remote_result_file))
   query_file.write("hive -e '%s';\n" % CLEAN_QUERY)
   query_file.close()
 
   remote_query_file = "/tmp/%s" % query_file_name
   print >> stderr, "Copying files to Impala"
-  scp_to(impala_host, opts.impala_identity_file, "ubuntu", 
+  scp_to(impala_host, opts.impala_identity_file, "ubuntu",
       local_query_file, remote_query_file)
   ssh_impala("chmod 775 %s" % remote_query_file)
 
@@ -485,8 +486,8 @@ def run_impala_benchmark(opts):
 
   # Collect results
   local_result_file = os.path.join(LOCAL_TMP_DIR, "%s_results" % prefix)
-  scp_from(impala_host, opts.impala_identity_file, "ubuntu", 
-      remote_result_file, local_result_file) 
+  scp_from(impala_host, opts.impala_identity_file, "ubuntu",
+      remote_result_file, local_result_file)
   contents = open(local_result_file).readlines()
 
   if opts.impala_use_hive:
@@ -553,7 +554,23 @@ def run_hive_benchmark(opts):
   query_list += "CREATE TABLE scratch_rank AS SELECT pageURL, pageRank FROM scratch WHERE pageRank > 1000;"
 
   if opts.tez:
-    runner = "HIVE_HOME=/opt/apache-hive-0.13.0.2.1.0.0-92-bin HIVE_CONF_DIR=$HIVE_HOME/conf PATH=$HIVE_HOME/bin:$PATH HADOOP_CLASSPATH=/opt/tez-0.2.0.2.1.0.0-92/*:/opt/tez-0.2.0.2.1.0.0-92/lib/* HADOOP_USER_CLASSPATH_FIRST=true HADOOP_USER_NAME=hive /opt/apache-hive-0.13.0.2.1.0.0-92-bin/bin/hive -i /root/benchmark/runner/tez/Stinger-Preview-Quickstart/configs/stinger.settings -hiveconf hive.optimize.tez=true"
+    # Page 6 of the following doc:
+    # http://public-repo-1.hortonworks.com/HDP-LABS/Projects/Stinger/StingerTechnicalPreviewInstall.pdf
+
+    # runner = """
+    # HIVE_HOME=/opt/apache-hive-0.13.0.2.1.0.0-92-bin \
+    # HIVE_CONF_DIR=$HIVE_HOME/conf \
+    # PATH=$HIVE_HOME/bin:$PATH \
+    # HADOOP_CLASSPATH=/opt/tez-0.2.0.2.1.0.0-92/*:/opt/tez-0.2.0.2.1.0.0-92/lib/* \
+    # HADOOP_USER_CLASSPATH_FIRST=true \
+    # HADOOP_USER_NAME=hive \
+    # /opt/apache-hive-0.13.0.2.1.0.0-92-bin/bin/hive \
+      # -i /root/benchmark/runner/tez/Stinger-Preview-Quickstart/configs/stinger.settings \
+      # -hiveconf hive.optimize.tez=true
+    # """
+
+    # It seems like HADOOP_USER_NAME=hive (original) won't work. See prepare_hive_dataset() in prepare_benchmark.py.
+    runner = "HADOOP_USER_NAME=hdfs hive -hiveconf hive.execution.engine=tez"
     #query_map = TEZ_MAP
     query_map = QUERY_MAP
   else:
@@ -584,7 +601,7 @@ def run_hive_benchmark(opts):
 
   query_file.close()
 
-  print "Copying files to Hive"
+  print "Copying query files to Hive host"
   scp_to(opts.hive_host, opts.hive_identity_file, "root", local_query_file,
       remote_query_file)
   ssh_hive("chmod 775 %s" % remote_query_file)
@@ -767,7 +784,9 @@ def ensure_spark_stopped_on_slaves(slaves):
 def main():
   global opts
   opts = parse_args()
+
   print "Query %s:" % opts.query_num
+
   if opts.impala:
     results, contents = run_impala_benchmark(opts)
   if opts.shark:
@@ -804,10 +823,10 @@ def main():
   fname = opts.prefix + fname
 
   def prettylist(lst):
-    return ",".join([str(k) for k in lst]) 
+    return ",".join([str(k) for k in lst])
 
   output = StringIO()
-  outfile = open('results/%s_%s_%s' % (fname, opts.query_num, datetime.datetime.now()), 'w')
+  outfile = open('results_%s_%s_%s' % (fname, opts.query_num, datetime.datetime.now()), 'w')
 
   try:
     if not opts.redshift:
